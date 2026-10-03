@@ -64,6 +64,8 @@ describe('adaptive investigation board', () => {
     session = askCharacter(session, 'mara', 'mara-margin').session
     session = openDocument(session, 'correspondence').session
     session = askCharacter(session, 'ilya', 'ilya-signature').session
+    expect(getInvestigationBoard(session).nextAction).toContain('directory')
+    session = openDocument(session, 'directory').session
     expect(getInvestigationBoard(session).nextAction).toContain('dark')
   })
 })
@@ -119,6 +121,37 @@ describe('engine-owned prepared mystery routes', () => {
 })
 
 describe('prepared character and session safety boundaries', () => {
+  it('rejects repeated actions inside one model proposal without applying progress', () => {
+    const session = prepareBase('chronological')
+    const action = { type: 'grant-clue', clueId: 'maintenance-signature', disclosureId: 'ilya-signature' }
+    const result = applyModelProposal(session, 'ilya', {
+      schema: 'phantom-web/model-response/v1', text: 'A departure handshake.',
+      claims: ['maintenance-signature'], actions: [action, action],
+    })
+    expect(result.accepted).toBe(false)
+    expect(result.session).toBe(session)
+    expect(result.errors.join(' ')).toContain('duplicate')
+  })
+
+  it('refuses oversized, fabricated, ambiguous, and inconsistent imported saves', () => {
+    const session = saveEvidence(prepareBase('chronological'), 'maintenance').session
+    const malformed = [
+      { ...session, evidence: [{ ...session.evidence[0], quote: 'fabricated source text' }] },
+      { ...session, evidence: [session.evidence[0], session.evidence[0]] },
+      { ...session, characterMemory: { ghost: [] } },
+      { ...session, characterMemory: { ilya: [{ disclosureId: 'ghost', prompt: 'Question', response: 'Answer', mode: 'prepared' }] } },
+      { ...session, phase: 'complete', ending: null },
+    ]
+    for (const imported of malformed) expect(() => readSession(JSON.stringify(imported))).toThrow()
+    expect(() => readSession(' '.repeat(100_001) + writeSession(session))).toThrow(/limit/)
+    expect(readSession(writeSession(session))).toEqual(session)
+  })
+
+  it('round-trips a valid long live question without losing persistence', () => {
+    const session = recordLiveDialogue(prepareBase('chronological'), 'mara', 'a'.repeat(1200), 'A permitted answer.').session
+    expect(readSession(writeSession(session))).toEqual(session)
+  })
+
   it('accepts one permitted model clue and rejects forbidden or fabricated actions atomically', () => {
     const base = prepareBase('chronological')
     const valid = applyModelProposal(base, 'ilya', {
