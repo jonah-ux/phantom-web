@@ -37,6 +37,7 @@ function App() {
   const [liveBusy, setLiveBusy] = useState(false)
   const [liveMessage, setLiveMessage] = useState('')
   const liveEndpoint = (import.meta.env.VITE_PHANTOM_LIVE_ENDPOINT as string | undefined)?.trim() ?? ''
+  const [clueFilter, setClueFilter] = useState('')
 
   const document = CORPUS.documents.find(page => page.id === session.activeDocument) ?? CORPUS.documents[0]
   const results = useMemo(() => searchCorpus(CORPUS, query), [query])
@@ -173,8 +174,22 @@ function App() {
         <section className="panel notebook-panel">
           <div className="section-heading"><span>NOTEBOOK</span><small>{session.evidence.length} sources</small></div>
           {session.evidence.length === 0 && <p className="muted">Save a passage to keep its source and attach a note.</p>}
+          <input className="clue-filter" aria-label="Filter discovered clues" value={clueFilter} onChange={event => setClueFilter(event.target.value)} placeholder="Filter clues to connect" />
           <ul className="notebook-list">
-            {session.evidence.map(entry => <li key={entry.id}><button className="notebook-link" onClick={() => open(entry.documentId)}>{titleFor(entry.documentId)}</button><blockquote>{entry.quote}</blockquote><textarea aria-label={`Note for ${titleFor(entry.documentId)}`} defaultValue={entry.note} placeholder="Why does this matter?" onBlur={event => applyTransition(annotateEvidence(session, entry.id, event.currentTarget.value, entry.highlighted))} /><label className="check-row"><input type="checkbox" checked={entry.highlighted} onChange={event => applyTransition(annotateEvidence(session, entry.id, entry.note, event.currentTarget.checked))} /> flag as suspicious</label><div className="connection-row">{session.discoveredClues.slice(0, 3).map(clueId => <button key={clueId} className={entry.connectedClueIds.includes(clueId) ? 'chip chip-on' : 'chip'} onClick={() => applyTransition(connectEvidence(session, entry.id, clueId))}>{clueId}</button>)}</div></li>)}
+            {session.evidence.map(entry => {
+              const visibleClues = session.discoveredClues
+                .map(clueId => CANON.clues.find(item => item.id === clueId))
+                .filter((clue): clue is (typeof CANON.clues)[number] => Boolean(clue))
+                .filter(clue => !clueFilter.trim() || `${clue.title} ${clue.text}`.toLowerCase().includes(clueFilter.trim().toLowerCase()))
+              return <li key={entry.id}>
+                <button className="notebook-link" onClick={() => open(entry.documentId)}>{titleFor(entry.documentId)}</button>
+                <blockquote>{entry.quote}</blockquote>
+                <textarea aria-label={`Note for ${titleFor(entry.documentId)}`} defaultValue={entry.note} placeholder="Why does this matter?" onBlur={event => applyTransition(annotateEvidence(session, entry.id, event.currentTarget.value, entry.highlighted))} />
+                <label className="check-row"><input type="checkbox" checked={entry.highlighted} onChange={event => applyTransition(annotateEvidence(session, entry.id, entry.note, event.currentTarget.checked))} /> flag as suspicious</label>
+                <div className="connection-row">{visibleClues.map(clue => <button key={clue.id} className={entry.connectedClueIds.includes(clue.id) ? 'chip chip-on' : 'chip'} onClick={() => applyTransition(connectEvidence(session, entry.id, clue.id))}><strong>{entry.connectedClueIds.includes(clue.id) ? '✓ ' : ''}{clue.title}</strong><small>{clue.kind}</small></button>)}</div>
+                {entry.connectedClueIds.length > 0 && <p className="connected-note">Connected clues stay with this source after reload.</p>}
+              </li>
+            })}
           </ul>
         </section>
       </aside>
