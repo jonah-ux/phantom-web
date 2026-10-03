@@ -29,7 +29,7 @@ export interface DialogueTurn {
   disclosureId: string
   prompt: string
   response: string
-  mode: 'prepared' | 'live-fixture'
+  mode: 'prepared' | 'live' | 'live-fixture'
 }
 
 export interface StoryEvent {
@@ -94,7 +94,7 @@ const dialogueSchema = z.object({
   disclosureId: id,
   prompt: z.string().min(1).max(300),
   response: z.string().min(1).max(2000),
-  mode: z.enum(['prepared', 'live-fixture']),
+  mode: z.enum(['prepared', 'live', 'live-fixture']),
 }).strict()
 
 const eventSchema = z.object({
@@ -323,6 +323,23 @@ export function askCharacter(session: Session, characterId: CharacterId, disclos
   appendEvent(next, 'dialogue', `${characterId}:${disclosureId}`, `dialogue:${characterId}:${disclosureId}`)
   if (disclosure.reveals) grantClue(next, disclosure.reveals, `character:${characterId}`)
   return { session: next, changed: true, message: `${character.name} answered in prepared mode.`, value: turn }
+}
+
+export function recordLiveDialogue(session: Session, characterId: CharacterId, prompt: string, response: string): Transition<DialogueTurn> {
+  const character = findCharacter(characterId)
+  const cleanPrompt = prompt.trim().slice(0, 1200)
+  const cleanResponse = response.trim().slice(0, 2000)
+  if (!character || !cleanPrompt || !cleanResponse) return { session, changed: false, message: 'The live dialogue could not be recorded.' }
+  const next = clone(session)
+  const turn: DialogueTurn = {
+    disclosureId: `live-${(next.characterMemory[characterId] ?? []).length + 1}`,
+    prompt: cleanPrompt,
+    response: cleanResponse,
+    mode: 'live',
+  }
+  next.characterMemory[characterId] = [...(next.characterMemory[characterId] ?? []), turn].slice(-20)
+  appendEvent(next, 'dialogue', `${characterId}:${turn.disclosureId}`, `dialogue:${characterId}:${turn.disclosureId}`)
+  return { session: next, changed: true, message: `${character.name} answered through the optional live adapter.`, value: turn }
 }
 
 export function runTerminalCommand(session: Session, rawCommand: string): Transition {
