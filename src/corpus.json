@@ -1,0 +1,9 @@
+{
+  "schema": "phantom-web/corpus/v1",
+  "facts": ["station-opened", "contact-ended", "signal-repeated"],
+  "documents": [
+    {"id": "welcome", "title": "Astra Relay / Welcome", "address": "astra.invalid/welcome", "body": "Astra Relay opened in 1989 to study repeating signals. The station's public archive last received an official update in 1997. This is an original fictional setting.", "facts": ["station-opened", "contact-ended"]},
+    {"id": "maintenance", "title": "Maintenance log / 1997", "address": "astra.invalid/archive/maintenance", "body": "Final contact ended in 1997. The receiver clock recorded a repeating signal at 03:17. The timing is preserved here for the next investigator.", "facts": ["contact-ended", "signal-repeated"]},
+    {"id": "forum", "title": "Archive forum / A new transmission?", "address": "astra.invalid/forum/signal", "body": "Archivist: the signal is repeating at 03:17 again. Compare the maintenance log before drawing a conclusion. The full mystery and character dialogue are still to be written.", "facts": ["signal-repeated"]}
+  ]
+}
