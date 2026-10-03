@@ -29,7 +29,7 @@ export const LiveCharacterResponseSchema = z.object({
 export type LiveCharacterRequest = z.infer<typeof LiveCharacterRequestSchema>
 export type LiveCharacterResponse = z.infer<typeof LiveCharacterResponseSchema>
 
-export type LiveStatus = 'ok' | 'unavailable' | 'cancelled' | 'timeout' | 'network-error' | 'invalid-response'
+export type LiveStatus = 'ok' | 'unavailable' | 'cancelled' | 'timeout' | 'network-error' | 'invalid-request' | 'invalid-response'
 
 export interface LiveResult {
   status: LiveStatus
@@ -76,8 +76,11 @@ export async function requestLiveResponse(options: {
 }): Promise<LiveResult> {
   const endpoint = options.endpoint?.trim()
   if (!endpoint) return { status: 'unavailable', detail: 'No live adapter endpoint is configured; prepared mode remains available.' }
+  if (options.signal?.aborted) return { status: 'cancelled', detail: 'Live request cancelled. Your investigation was not changed; retry is safe.' }
   const fetchImpl = options.fetchImpl ?? fetch
-  const request = buildLiveRequest(options.session, options.characterId, options.prompt)
+  let request: LiveCharacterRequest
+  try { request = buildLiveRequest(options.session, options.characterId, options.prompt) }
+  catch { return { status: 'invalid-request', detail: 'The live question must contain 1–1200 characters and valid character context. Your investigation was not changed.' } }
   const controller = new AbortController()
   let timedOut = false
   const timeout = setTimeout(() => {
