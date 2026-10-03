@@ -9,6 +9,7 @@ import {
   getInvestigationBoard,
   openDocument,
   readSession,
+  recordLiveDialogue,
   runTerminalCommand,
   saveEvidence,
   writeSession,
@@ -178,5 +179,14 @@ describe('prepared character and session safety boundaries', () => {
     expect(() => readSession('{')).toThrow()
     expect(() => readSession(JSON.stringify({ ...session, canonVersion: 'old-story' }))).toThrow()
     expect(() => readSession(JSON.stringify({ ...session, discoveredClues: ['missing-clue'] }))).toThrow()
+  })
+
+  it('persists live dialogue separately from engine-granted clue effects', () => {
+    const session = prepareBase('chronological')
+    const recorded = recordLiveDialogue(session, 'mara', 'What about the fourth voice?', 'I can discuss the margin, not a name.')
+    expect(recorded.changed).toBe(true)
+    expect(recorded.value?.mode).toBe('live')
+    expect(recorded.session.discoveredClues).toEqual(session.discoveredClues)
+    expect(readSession(writeSession(recorded.session)).characterMemory.mara[0]).toEqual(recorded.value)
   })
 })

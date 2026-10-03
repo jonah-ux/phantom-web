@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { CANON, CORPUS } from './canon'
 import type { CharacterId } from './canon'
-import { annotateEvidence, applyModelProposal, askCharacter, chooseEnding, connectEvidence, createEmptySession, getInvestigationBoard, openDocument, readSession, requestHint, runTerminalCommand, saveEvidence, writeSession } from './engine'
+import { annotateEvidence, applyModelProposal, askCharacter, chooseEnding, connectEvidence, createEmptySession, getInvestigationBoard, openDocument, readSession, recordLiveDialogue, requestHint, runTerminalCommand, saveEvidence, writeSession } from './engine'
 import type { Session } from './engine'
 import { searchCorpus } from './domain'
 import { requestLiveResponse } from './live-adapter'
@@ -31,7 +31,6 @@ function App() {
   const [hintText, setHintText] = useState('')
   const [solutionVisible, setSolutionVisible] = useState(false)
   const [importText, setImportText] = useState('')
-  const [freeQuestion, setFreeQuestion] = useState('')
   const [interactionMode, setInteractionMode] = useState<'prepared' | 'live'>('prepared')
   const [liveCharacterId, setLiveCharacterId] = useState<CharacterId>('mara')
   const [liveQuestion, setLiveQuestion] = useState('')
@@ -85,11 +84,6 @@ function App() {
     applyTransition(transition)
   }
 
-  function askUnexpected(characterName: string) {
-    setMessage(`${characterName} is marked PREPARED in no-key mode. Ask one of the authored prompts; free-form live AI is an optional future adapter.`)
-    setFreeQuestion('')
-  }
-
   async function askLive() {
     const prompt = liveQuestion.trim()
     if (!prompt || liveBusy) return
@@ -99,8 +93,9 @@ function App() {
     if (result.status === 'ok' && result.proposal) {
       const applied = applyModelProposal(session, liveCharacterId, result.proposal)
       if (applied.accepted) {
-        setSession(applied.session)
-        try { localStorage.setItem(storageKey, writeSession(applied.session)) } catch { /* The live response remains visible in this tab. */ }
+        const recorded = recordLiveDialogue(applied.session, liveCharacterId, prompt, result.proposal.text)
+        setSession(recorded.session)
+        try { localStorage.setItem(storageKey, writeSession(recorded.session)) } catch { /* The live response remains visible in this tab. */ }
         setLiveMessage(`${result.detail} ${result.proposal.text}`)
       } else setLiveMessage(`The engine rejected the live proposal: ${applied.errors.join('; ')}`)
     } else setLiveMessage(result.detail)
@@ -202,7 +197,7 @@ function App() {
         <section className="panel people-panel">
           <div className="section-heading"><span>WITNESSES</span><small>prepared mode</small></div>
           <p className="muted">Each witness has a motive and a narrow disclosure gate. Their responses cannot change the canon on their own.</p>
-          {CANON.characters.map(character => { const ready = character.disclosures.some(disclosure => disclosure.requires.every(clue => session.discoveredClues.includes(clue))); return <article key={character.id} className={ready ? 'character-card ready' : 'character-card'}><div className="character-top"><div><h3>{character.name}</h3><span>{character.role}</span></div><b>{ready ? 'READY' : 'WAITING'}</b></div><p>{character.motive}</p><div className="character-prompts">{character.disclosures.map(disclosure => { const available = disclosure.requires.every(clue => session.discoveredClues.includes(clue)); const asked = session.characterMemory[character.id]?.some(turn => turn.disclosureId === disclosure.id); return <button key={disclosure.id} className="prompt-button" disabled={!available} onClick={() => ask(character.id, disclosure.id)}>{asked ? '✓ ' : ''}{disclosure.label}</button> })}</div><div className="free-question"><input value={freeQuestion} onChange={event => setFreeQuestion(event.target.value)} placeholder="Ask an unexpected question" /><button className="secondary" onClick={() => askUnexpected(character.name)} disabled={!freeQuestion.trim()}>Ask</button></div></article> })}
+          {CANON.characters.map(character => { const ready = character.disclosures.some(disclosure => disclosure.requires.every(clue => session.discoveredClues.includes(clue))); const transcript = session.characterMemory[character.id] ?? []; return <article key={character.id} className={ready ? 'character-card ready' : 'character-card'}><div className="character-top"><div><h3>{character.name}</h3><span>{character.role}</span></div><b>{ready ? 'READY' : 'WAITING'}</b></div><p>{character.motive}</p><div className="character-prompts">{character.disclosures.map(disclosure => { const available = disclosure.requires.every(clue => session.discoveredClues.includes(clue)); const asked = transcript.some(turn => turn.disclosureId === disclosure.id); return <button key={disclosure.id} className="prompt-button" disabled={!available} onClick={() => ask(character.id, disclosure.id)}>{asked ? '✓ ' : ''}{disclosure.label}</button> })}</div>{transcript.length > 0 && <div className="transcript" aria-live="polite"><span className="transcript-label">CONVERSATION / {character.name}</span>{transcript.map((turn, index) => <div className="transcript-turn" key={`${turn.disclosureId}-${index}`}><p className="transcript-prompt"><b>YOU</b> {turn.prompt}</p><p className="transcript-response"><b>{character.name.toUpperCase()}</b> {turn.response}</p><small>{turn.mode === 'prepared' ? 'PREPARED RESPONSE' : 'LIVE RESPONSE'}</small></div>)}</div>}<p className="character-note">Prepared prompts are the authored questions for this witness. Use LIVE ADAPTER below for an unexpected question.</p></article> })}
         </section>
 
         {interactionMode === 'live' && <section className="panel live-panel"><div className="section-heading"><span>LIVE CHARACTER ADAPTER</span><small>{liveEndpoint ? 'server endpoint configured' : 'no endpoint configured'}</small></div><p className="muted">Live mode sends only this prompt, discovered clues known by the selected character, recent authored pages, and that character's bounded memory. A response is inert until the engine validates its claims and actions.</p><div className="live-controls"><label htmlFor="live-character">Witness</label><select id="live-character" value={liveCharacterId} onChange={event => setLiveCharacterId(event.target.value as CharacterId)}>{CANON.characters.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}</select><label htmlFor="live-question">Question</label><input id="live-question" value={liveQuestion} onChange={event => setLiveQuestion(event.target.value)} placeholder="Ask a question the prepared prompts do not cover" /><button onClick={() => { void askLive() }} disabled={!liveQuestion.trim() || liveBusy}>{liveBusy ? 'Waiting…' : 'Ask live adapter'}</button></div>{liveMessage && <p className="live-message" role="status">{liveMessage}</p>}</section>}
