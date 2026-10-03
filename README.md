@@ -1,5 +1,7 @@
 # Phantom Web
 
+[Source repository](https://github.com/jonah-ux/phantom-web)
+
 A fictional internet with a coherent, interactive mystery.
 
 **Status: runnable development starter. Live AI integration and the complete product are still to be built.**
