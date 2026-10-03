@@ -1,9 +1,159 @@
 {
-  "schema": "phantom-web/corpus/v1",
-  "facts": ["station-opened", "contact-ended", "signal-repeated"],
+  "schema": "phantom-web/corpus/v2",
+  "facts": [
+    "station-opened",
+    "contact-ended",
+    "signal-repeated",
+    "crew-listed",
+    "archive-updated",
+    "hidden-harbor",
+    "evacuation-signed",
+    "relay-choice"
+  ],
   "documents": [
-    {"id": "welcome", "title": "Astra Relay / Welcome", "address": "astra.invalid/welcome", "body": "Astra Relay opened in 1989 to study repeating signals. The station's public archive last received an official update in 1997. This is an original fictional setting.", "facts": ["station-opened", "contact-ended"]},
-    {"id": "maintenance", "title": "Maintenance log / 1997", "address": "astra.invalid/archive/maintenance", "body": "Final contact ended in 1997. The receiver clock recorded a repeating signal at 03:17. The timing is preserved here for the next investigator.", "facts": ["contact-ended", "signal-repeated"]},
-    {"id": "forum", "title": "Archive forum / A new transmission?", "address": "astra.invalid/forum/signal", "body": "Archivist: the signal is repeating at 03:17 again. Compare the maintenance log before drawing a conclusion. The full mystery and character dialogue are still to be written.", "facts": ["signal-repeated"]}
+    {
+      "id": "welcome",
+      "title": "Astra Relay / Welcome",
+      "address": "astra.invalid/welcome",
+      "timestamp": "live mirror · 2026-10-03",
+      "style": "home",
+      "body": "The Astra Relay public archive has started updating again. The station opened in 1989 to study repeating signals, then went quiet after its final official transmission in 1997. The first new page is timestamped 03:17. If you are reading this, the relay is asking for a witness.",
+      "facts": ["station-opened", "contact-ended", "archive-updated"],
+      "links": ["directory", "maintenance", "news-disappearance", "message-console"],
+      "requiresClues": [],
+      "revealsClues": []
+    },
+    {
+      "id": "directory",
+      "title": "Staff directory / last roster",
+      "address": "astra.invalid/staff/directory",
+      "timestamp": "1997-08-21 · static copy",
+      "style": "directory",
+      "body": "ASTRA RELAY / PERSONNEL\n\nMara Vale — archive editor, public correspondence\nIlya Sen — receiver maintenance, night rotation\nNoor Calder — field reporter, visiting researcher\n\nA handwritten line below the roster reads: ‘Three names on the page. Four voices on the wire.’ The scan is too damaged to identify the fourth voice.",
+      "facts": ["crew-listed"],
+      "links": ["mara-personal", "ilya-notes", "reporter-desk", "message-console"],
+      "requiresClues": [],
+      "revealsClues": ["shift-roster-gap"]
+    },
+    {
+      "id": "maintenance",
+      "title": "Maintenance log / receiver bay",
+      "address": "astra.invalid/logs/receiver-bay",
+      "timestamp": "1997-08-21 · 03:17 local",
+      "style": "technical-log",
+      "body": "03:11 — receiver stable.\n03:17 — blue channel pulsed twice. No incoming carrier.\n03:18 — clock drift +00:07 noted; do not correct until Ilya returns.\n03:22 — night rotation signed off as ‘weather interference.’\n\nThe weather explanation is copied into the public index, but the blue-channel notation is not.",
+      "facts": ["contact-ended", "signal-repeated"],
+      "links": ["forum-signal", "ilya-notes", "message-console"],
+      "requiresClues": [],
+      "revealsClues": ["clock-0317"]
+    },
+    {
+      "id": "news-disappearance",
+      "title": "News archive / The relay goes dark",
+      "address": "astra.invalid/news/relay-goes-dark",
+      "timestamp": "1998-02-04 · clipping index",
+      "style": "newspaper",
+      "body": "LOCAL SCIENCE FACILITY CLOSED AFTER WEATHER EVENT\n\nAstra Relay was listed as abandoned after a storm damaged the receiver array. The article was filed in 1998, but its margin carries a 1997 postmark and a correction made at 03:17. No storm appears in the station's own weather ledger.",
+      "facts": ["contact-ended", "archive-updated"],
+      "links": ["forum-signal", "correspondence", "decision-archive"],
+      "requiresClues": [],
+      "revealsClues": ["postmark-0317", "weather-excuse"]
+    },
+    {
+      "id": "forum-signal",
+      "title": "Relay forum / Is 03:17 an arrival?",
+      "address": "astra.invalid/forum/signal",
+      "timestamp": "live mirror · replies preserved",
+      "style": "forum",
+      "body": "THREAD 441 / ARCHIVED\n\nnoor_c: The 03:17 stamp appears on both the maintenance log and the later clipping. That is a comparison, not a coincidence.\n\noldrelay: The clock was seven minutes slow.\n\nnoor_c: Exactly. Compare the drift before deciding whether the signal came in or went out.\n\nA moderator note links the staff roster but refuses to name the fourth voice.",
+      "facts": ["signal-repeated"],
+      "links": ["directory", "maintenance", "news-disappearance", "message-console"],
+      "requiresClues": ["clock-0317", "postmark-0317"],
+      "revealsClues": []
+    },
+    {
+      "id": "mara-personal",
+      "title": "Mara Vale / margin index",
+      "address": "astra.invalid/people/mara-vale",
+      "timestamp": "1997-09-02 · personal mirror",
+      "style": "personal",
+      "body": "I kept the margins because the official index kept losing them. If a page has a small triangle beside the date, it belongs to the departure packet, not the public story. I never opened the packet. I promised the people who left that their names would stay out of the next edition.",
+      "facts": ["archive-updated"],
+      "links": ["correspondence", "decision-archive", "news-disappearance"],
+      "requiresClues": ["repeat-is-local"],
+      "revealsClues": []
+    },
+    {
+      "id": "ilya-notes",
+      "title": "Ilya Sen / receiver notebook",
+      "address": "astra.invalid/people/ilya-sen",
+      "timestamp": "1997-08-22 · recovered notebook",
+      "style": "personal",
+      "body": "A receiver does not care what the public index calls a pulse. It cares which channel carries the handshake. Blue was never used for weather. Blue was the channel we kept open when the crew needed a quiet route out.\n\nI wrote the signature down twice because I expected someone to call it a fault.",
+      "facts": ["signal-repeated"],
+      "links": ["maintenance", "message-console", "correspondence"],
+      "requiresClues": ["repeat-is-local"],
+      "revealsClues": []
+    },
+    {
+      "id": "message-console",
+      "title": "Relay terminal / message console",
+      "address": "astra.invalid/terminal/message-console",
+      "timestamp": "diagnostic shell · local fiction",
+      "style": "terminal",
+      "body": "ASTRA RELAY CONSOLE\n\nThe terminal is disconnected from the real internet. It can compare only the evidence already opened in this session.\n\nAvailable commands: COMPARE CLOCKS, AUDIT PACKET, RESTART\n\nA successful comparison writes one line to the local event ledger. It cannot reveal a page by itself.",
+      "facts": ["signal-repeated"],
+      "links": ["forum-signal", "correspondence", "decision-archive"],
+      "requiresClues": [],
+      "revealsClues": []
+    },
+    {
+      "id": "correspondence",
+      "title": "Correspondence / sealed departure packet",
+      "address": "astra.invalid/archive/departure-packet",
+      "timestamp": "1997-08-22 · opened by index key",
+      "style": "correspondence",
+      "body": "TO THE NEXT WITNESS\n\nWe did not vanish in the storm. We moved through the quiet harbor while the relay kept listening. The blue handshake marks the route; the archive's triangle marks consent. If the 03:17 updates return, the next witness may choose to wake the relay or keep the harbor quiet.\n\n— signed by the night rotation, names withheld by request",
+      "facts": ["hidden-harbor", "evacuation-signed"],
+      "links": ["mara-personal", "ilya-notes", "reporter-desk", "decision-archive"],
+      "requiresClues": ["archivist-redaction-key"],
+      "revealsClues": ["crew-survived"]
+    },
+    {
+      "id": "reporter-desk",
+      "title": "Noor Calder / field notebook",
+      "address": "astra.invalid/people/noor-calder",
+      "timestamp": "1998-02-05 · private field notes",
+      "style": "personal",
+      "body": "I came for a storm story and found a deliberate silence. The maintenance signature, the roster gap, and the packet all point in the same direction: someone chose the relay's disappearance. I can confirm the crew survived the move, but I will not publish the harbor's coordinates without a second witness.",
+      "facts": ["hidden-harbor"],
+      "links": ["directory", "correspondence", "decision-archive"],
+      "requiresClues": ["crew-survived", "quarantine-reason"],
+      "revealsClues": []
+    },
+    {
+      "id": "decision-archive",
+      "title": "Decision archive / the next witness",
+      "address": "astra.invalid/archive/decision",
+      "timestamp": "live mirror · waiting for a choice",
+      "style": "archive",
+      "body": "The departure packet is complete enough to pose its final question. The relay can wake and publish the truth of the evacuation, or it can remain sealed so the quiet harbor stays private. The choice belongs to the witness who assembled the evidence.",
+      "facts": ["relay-choice"],
+      "links": ["message-console", "welcome", "correspondence"],
+      "requiresClues": ["decision-ready"],
+      "revealsClues": []
+    },
+    {
+      "id": "continuity-log",
+      "title": "Continuity log / archive heartbeat",
+      "address": "astra.invalid/archive/continuity",
+      "timestamp": "live mirror · event ledger",
+      "style": "archive",
+      "body": "Every page in this mirror is a fictional artifact. The event ledger records only engine-validated discoveries; prose from a character cannot rewrite the chronology. Reopening a page is safe, and a saved session can be resumed without replaying its rewards.",
+      "facts": ["archive-updated"],
+      "links": ["welcome", "message-console", "decision-archive"],
+      "requiresClues": ["repeat-is-local"],
+      "revealsClues": []
+    }
   ]
 }
