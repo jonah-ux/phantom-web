@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { CANON, CORPUS } from './canon'
 import type { CharacterId } from './canon'
-import { annotateEvidence, askCharacter, chooseEnding, connectEvidence, createEmptySession, openDocument, readSession, requestHint, runTerminalCommand, saveEvidence, writeSession } from './engine'
+import { annotateEvidence, applyModelProposal, askCharacter, chooseEnding, connectEvidence, createEmptySession, openDocument, readSession, requestHint, runTerminalCommand, saveEvidence, writeSession } from './engine'
 import type { Session } from './engine'
 import { searchCorpus } from './domain'
+import { requestLiveResponse } from './live-adapter'
 import './App.css'
 
 const storageKey = 'phantom-web:session:v1'
@@ -29,6 +30,12 @@ function App() {
   const [solutionVisible, setSolutionVisible] = useState(false)
   const [importText, setImportText] = useState('')
   const [freeQuestion, setFreeQuestion] = useState('')
+  const [interactionMode, setInteractionMode] = useState<'prepared' | 'live'>('prepared')
+  const [liveCharacterId, setLiveCharacterId] = useState<CharacterId>('mara')
+  const [liveQuestion, setLiveQuestion] = useState('')
+  const [liveBusy, setLiveBusy] = useState(false)
+  const [liveMessage, setLiveMessage] = useState('')
+  const liveEndpoint = (import.meta.env.VITE_PHANTOM_LIVE_ENDPOINT as string | undefined)?.trim() ?? ''
 
   const document = CORPUS.documents.find(page => page.id === session.activeDocument) ?? CORPUS.documents[0]
   const results = useMemo(() => searchCorpus(CORPUS, query), [query])
@@ -80,6 +87,23 @@ function App() {
     setFreeQuestion('')
   }
 
+  async function askLive() {
+    const prompt = liveQuestion.trim()
+    if (!prompt || liveBusy) return
+    setLiveBusy(true)
+    setLiveMessage('Contacting the optional live adapter…')
+    const result = await requestLiveResponse({ endpoint: liveEndpoint, session, characterId: liveCharacterId, prompt })
+    if (result.status === 'ok' && result.proposal) {
+      const applied = applyModelProposal(session, liveCharacterId, result.proposal)
+      if (applied.accepted) {
+        setSession(applied.session)
+        try { localStorage.setItem(storageKey, writeSession(applied.session)) } catch { /* The live response remains visible in this tab. */ }
+        setLiveMessage(`${result.detail} ${result.proposal.text}`)
+      } else setLiveMessage(`The engine rejected the live proposal: ${applied.errors.join('; ')}`)
+    } else setLiveMessage(result.detail)
+    setLiveBusy(false)
+  }
+
   function useHint() {
     const transition = requestHint(session)
     applyTransition(transition)
@@ -103,8 +127,9 @@ function App() {
       </div>
       <div className="session-identity" aria-label="fictional session identity">
         <span>WITNESS SESSION</span>
-        <strong>LOCAL / NO-KEY</strong>
-        <small>Prepared responses are labeled. No real network or provider is contacted.</small>
+        <div className="mode-toggle" role="group" aria-label="Character interaction mode"><button className={interactionMode === 'prepared' ? 'mode-button mode-active' : 'mode-button'} onClick={() => setInteractionMode('prepared')}>PREPARED</button><button className={interactionMode === 'live' ? 'mode-button mode-active' : 'mode-button'} onClick={() => setInteractionMode('live')}>LIVE ADAPTER</button></div>
+        <strong>{interactionMode === 'prepared' ? 'LOCAL / NO-KEY' : liveEndpoint ? 'LIVE / OPTIONAL' : 'LIVE / UNAVAILABLE'}</strong>
+        <small>{interactionMode === 'prepared' ? 'Prepared responses are labeled. No real network or provider is contacted.' : liveEndpoint ? 'Only discovered, character-permitted context is sent to the configured server endpoint.' : 'No VITE_PHANTOM_LIVE_ENDPOINT is configured. Prepared mode remains complete.'}</small>
       </div>
     </header>
 
@@ -170,6 +195,8 @@ function App() {
           <p className="muted">Each witness has a motive and a narrow disclosure gate. Their responses cannot change the canon on their own.</p>
           {CANON.characters.map(character => { const ready = character.disclosures.some(disclosure => disclosure.requires.every(clue => session.discoveredClues.includes(clue))); return <article key={character.id} className={ready ? 'character-card ready' : 'character-card'}><div className="character-top"><div><h3>{character.name}</h3><span>{character.role}</span></div><b>{ready ? 'READY' : 'WAITING'}</b></div><p>{character.motive}</p><div className="character-prompts">{character.disclosures.map(disclosure => { const available = disclosure.requires.every(clue => session.discoveredClues.includes(clue)); const asked = session.characterMemory[character.id]?.some(turn => turn.disclosureId === disclosure.id); return <button key={disclosure.id} className="prompt-button" disabled={!available} onClick={() => ask(character.id, disclosure.id)}>{asked ? '✓ ' : ''}{disclosure.label}</button> })}</div><div className="free-question"><input value={freeQuestion} onChange={event => setFreeQuestion(event.target.value)} placeholder="Ask an unexpected question" /><button className="secondary" onClick={() => askUnexpected(character.name)} disabled={!freeQuestion.trim()}>Ask</button></div></article> })}
         </section>
+
+        {interactionMode === 'live' && <section className="panel live-panel"><div className="section-heading"><span>LIVE CHARACTER ADAPTER</span><small>{liveEndpoint ? 'server endpoint configured' : 'no endpoint configured'}</small></div><p className="muted">Live mode sends only this prompt, discovered clues known by the selected character, recent authored pages, and that character's bounded memory. A response is inert until the engine validates its claims and actions.</p><div className="live-controls"><label htmlFor="live-character">Witness</label><select id="live-character" value={liveCharacterId} onChange={event => setLiveCharacterId(event.target.value as CharacterId)}>{CANON.characters.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}</select><label htmlFor="live-question">Question</label><input id="live-question" value={liveQuestion} onChange={event => setLiveQuestion(event.target.value)} placeholder="Ask a question the prepared prompts do not cover" /><button onClick={() => { void askLive() }} disabled={!liveQuestion.trim() || liveBusy}>{liveBusy ? 'Waiting…' : 'Ask live adapter'}</button></div>{liveMessage && <p className="live-message" role="status">{liveMessage}</p>}</section>}
 
         <section className="panel hint-panel">
           <div className="section-heading"><span>HINT LADDER</span><small>{session.hintsUsed}/{CANON.hints.length}</small></div>
