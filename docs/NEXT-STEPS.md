@@ -8,7 +8,7 @@ The first vertical slice now includes the authored Astra Relay canon, chronology
 
 - Exercise the running browser from an empty local session and capture visible proof for navigation, search, notebook reload, prepared dialogue, hints, and each ending.
 - Point `VITE_PHANTOM_LIVE_ENDPOINT` at an authorized server-side provider route, then prove one real configured conversation through the typed adapter. Keep the prepared route as the no-key fallback and repeat timeout/cancellation, forbidden-claim, and safe-retry checks against the live route.
-- Add a spoiler-conscious demo recording, clean-clone installation proof, accessibility pass, and release notes. Hosting/public deployment remains a separate owner action.
+- Add a spoiler-conscious demo recording, clean-clone installation proof, spoken screen-reader and Safari/Firefox acceptance, and release notes. The targeted Chromium keyboard and 320px layout pass covers focusable page gates, document focus, named tools, save export, and the no-endpoint live fallback; it does not establish full assistive-technology conformance. Hosting/public deployment remains a separate owner action.
 - Reconcile the first focused pull request against current `main`, then continue feature slices on new `codex/` branches. Do not treat this local worktree, a green build, or a draft PR as a deployed release.
 
 Use the complete [build prompt](BUILD-PROMPT.md) for sequencing and acceptance. Defer arbitrary world generation, voice casting, multiplayer, outside web integrations, and billing until the complete mystery and its release proof are finished.

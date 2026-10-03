@@ -12,6 +12,8 @@ The Astra Relay story is a complete no-key investigation with twelve authored pa
 
 Prepared character responses are labeled `LOCAL / NO-KEY` and cannot mutate the story outside the engine's authorized clue actions. The header also exposes `LIVE ADAPTER`; it is visibly unavailable until `VITE_PHANTOM_LIVE_ENDPOINT` points at a server route that returns the typed response envelope. No model credentials are required in the browser.
 
+![The prepared Astra Relay investigation, with the field board and archive navigation](docs/images/investigation-desktop.png)
+
 ## Start locally
 
 Use Node.js 22.12 or newer and npm. From a clean clone:
@@ -30,6 +32,16 @@ npm run verify
 ```
 
 This runs lint, TypeScript, canon/engine checks, and the production build. CI runs the same command after a locked install. Browser acceptance is additional product proof; a build alone is not that proof.
+
+## Keyboard and small screens
+
+Press Tab on first load to reveal **Skip to investigation**. Activating it moves focus to the field board. Locked archive pages and board leads remain in the keyboard sequence so their requirements can be read; activating them explains the gate without advancing the story. Opening an available page moves focus to its heading, and the next Tab reaches its document actions.
+
+Archive and notebook tools, investigation tools, modes, search results, and save data have accessible names or state descriptions. Focus outlines contrast with both dark panels and light document pages. The layout supports 320px-wide screens, navigation controls have at least 40px target height, and reduced-motion preferences suppress the progress animation.
+
+![A source and its document actions at 320px width, with a visible keyboard focus outline](docs/images/keyboard-mobile.png)
+
+The targeted acceptance pass uses Chromium keyboard interaction, accessibility-tree inspection, and viewport measurements. Spoken screen-reader announcements and Safari/Firefox behavior still require separate acceptance.
 
 ## Play the first mystery
 
