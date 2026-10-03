@@ -6,6 +6,7 @@ import {
   askCharacter,
   chooseEnding,
   createEmptySession,
+  getInvestigationBoard,
   openDocument,
   readSession,
   runTerminalCommand,
@@ -43,6 +44,26 @@ describe('Astra Relay canon and clue graph', () => {
   it('rejects an accidental unknown prerequisite', () => {
     const broken = { ...CANON, clues: [...CANON.clues, { ...CANON.clues[0], id: 'broken-clue', requires: ['missing-clue'] }] }
     expect(validateCanon(CORPUS, broken)).toContain('clue broken-clue requires an unknown clue')
+  })
+})
+
+describe('adaptive investigation board', () => {
+  it('starts with a useful lead and locks later beats', () => {
+    const board = getInvestigationBoard(createEmptySession())
+    expect(board.progress).toBe(0)
+    expect(board.nextAction).toContain('maintenance log')
+    expect(board.beats.map(beat => beat.status)).toEqual(['active', 'locked', 'locked', 'locked'])
+  })
+
+  it('moves the lead forward from signal comparison to witness choice', () => {
+    let session = createEmptySession()
+    for (const page of ['maintenance', 'news-disappearance', 'message-console']) session = openDocument(session, page).session
+    session = runTerminalCommand(session, 'COMPARE CLOCKS').session
+    expect(getInvestigationBoard(session).nextAction).toContain('triangle')
+    session = askCharacter(session, 'mara', 'mara-margin').session
+    session = openDocument(session, 'correspondence').session
+    session = askCharacter(session, 'ilya', 'ilya-signature').session
+    expect(getInvestigationBoard(session).nextAction).toContain('dark')
   })
 })
 

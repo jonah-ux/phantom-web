@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { CANON, CORPUS } from './canon'
 import type { CharacterId } from './canon'
-import { annotateEvidence, applyModelProposal, askCharacter, chooseEnding, connectEvidence, createEmptySession, openDocument, readSession, requestHint, runTerminalCommand, saveEvidence, writeSession } from './engine'
+import { annotateEvidence, applyModelProposal, askCharacter, chooseEnding, connectEvidence, createEmptySession, getInvestigationBoard, openDocument, readSession, requestHint, runTerminalCommand, saveEvidence, writeSession } from './engine'
 import type { Session } from './engine'
 import { searchCorpus } from './domain'
 import { requestLiveResponse } from './live-adapter'
@@ -11,9 +11,11 @@ const storageKey = 'phantom-web:session:v1'
 
 function restoreSession(): { session: Session; message: string } {
   try {
-    return { session: readSession(localStorage.getItem(storageKey)), message: '' }
+    const raw = localStorage.getItem(storageKey)
+    const session = readSession(raw)
+    return { session: raw === null ? openDocument(session, 'welcome').session : session, message: '' }
   } catch {
-    return { session: createEmptySession(), message: 'The saved investigation could not be read. No imported progress was applied.' }
+    return { session: openDocument(createEmptySession(), 'welcome').session, message: 'The saved investigation could not be read. No imported progress was applied.' }
   }
 }
 
@@ -40,6 +42,7 @@ function App() {
   const document = CORPUS.documents.find(page => page.id === session.activeDocument) ?? CORPUS.documents[0]
   const results = useMemo(() => searchCorpus(CORPUS, query), [query])
   const availableEndings = CANON.endings.filter(ending => ending.requires.every(clue => session.discoveredClues.includes(clue)))
+  const board = getInvestigationBoard(session)
 
   function applyTransition<T>(transition: { session: Session; message: string; value?: T }) {
     setSession(transition.session)
@@ -148,6 +151,12 @@ function App() {
       </div>
       <div className="address-bar"><span aria-hidden="true">⌁</span><span>{document.address}</span><small>simulated address · fiction only</small></div>
       <div className="browser-history"><span>History:</span>{session.history.slice(-6).map((item, index) => <button key={`${item}-${index}`} onClick={() => open(item)}>{titleFor(item)}</button>)}</div>
+    </section>
+
+    <section className="caseboard panel" aria-labelledby="caseboard-title">
+      <div className="caseboard-heading"><div><span className="section-heading">FIELD BOARD <small>engine-sourced lead</small></span><h2 id="caseboard-title">Follow the signal before it fades.</h2></div><div className="board-progress"><strong>{board.progress}%</strong><span>evidence assembled</span><div className="progress-track" role="progressbar" aria-label="Investigation progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={board.progress}><span style={{ width: `${board.progress}%` }} /></div></div></div>
+      <p className="board-lead"><b>Next lead:</b> {board.nextAction}</p>
+      <ol className="beat-list">{board.beats.map(beat => <li key={beat.id} className={`beat beat-${beat.status}`}><button className="beat-button" onClick={() => open(beat.documentId)} disabled={beat.status === 'locked'} aria-current={beat.status === 'active' ? 'step' : undefined}><span className="beat-number">{beat.label}</span><strong>{beat.status === 'complete' ? '✓ ' : ''}{beat.summary}</strong><small>{beat.discovered}/{beat.clueIds.length} engine clues · {beat.status === 'locked' ? 'locked until the prior beat' : beat.status === 'complete' ? 'complete' : 'active lead'}</small></button></li>)}</ol>
     </section>
 
     <div className="workspace">

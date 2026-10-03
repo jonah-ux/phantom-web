@@ -62,6 +62,25 @@ export interface Transition<T = undefined> {
   value?: T
 }
 
+export type InvestigationBeatId = 'signal' | 'witnesses' | 'packet' | 'choice'
+export type InvestigationBeatStatus = 'locked' | 'active' | 'complete'
+
+export interface InvestigationBeat {
+  id: InvestigationBeatId
+  label: string
+  summary: string
+  documentId: string
+  clueIds: string[]
+  discovered: number
+  status: InvestigationBeatStatus
+}
+
+export interface InvestigationBoard {
+  nextAction: string
+  progress: number
+  beats: InvestigationBeat[]
+}
+
 const evidenceSchema = z.object({
   id: storageId,
   documentId: id,
@@ -182,6 +201,58 @@ export function createEmptySession(): Session {
 
 export function availableDocuments(session: Session) {
   return CORPUS.documents.filter(document => requirementsMet(session, document.requiresClues))
+}
+
+export function getInvestigationBoard(session: Session): InvestigationBoard {
+  const hasAll = (clues: string[]) => clues.every(clue => has(session, clue))
+  const signalClues = ['clock-0317', 'postmark-0317', 'repeat-is-local']
+  const witnessClues = ['archivist-redaction-key', 'maintenance-signature', 'quarantine-reason']
+  const packetClues = ['crew-survived', 'decision-ready']
+  const choiceClues = ['reporter-confirmation', 'archivist-request']
+  const signalComplete = hasAll(signalClues)
+  const witnessesComplete = hasAll(witnessClues)
+  const packetComplete = hasAll(packetClues)
+  const choiceComplete = Boolean(session.ending)
+  const beats: InvestigationBeat[] = [
+    {
+      id: 'signal', label: '01 / SIGNAL', summary: 'Compare the two 03:17 records.', documentId: 'message-console', clueIds: signalClues,
+      discovered: signalClues.filter(clue => has(session, clue)).length, status: signalComplete ? 'complete' : 'active',
+    },
+    {
+      id: 'witnesses', label: '02 / WITNESSES', summary: 'Ask the people who kept the route alive.', documentId: 'mara-personal', clueIds: witnessClues,
+      discovered: witnessClues.filter(clue => has(session, clue)).length, status: witnessesComplete ? 'complete' : signalComplete ? 'active' : 'locked',
+    },
+    {
+      id: 'packet', label: '03 / PACKET', summary: 'Reconstruct the departure without exposing it.', documentId: 'correspondence', clueIds: packetClues,
+      discovered: packetClues.filter(clue => has(session, clue)).length, status: packetComplete ? 'complete' : signalComplete ? 'active' : 'locked',
+    },
+    {
+      id: 'choice', label: '04 / CHOICE', summary: 'Decide whether the relay should wake.', documentId: 'decision-archive', clueIds: choiceClues,
+      discovered: choiceClues.filter(clue => has(session, clue)).length, status: choiceComplete ? 'complete' : packetComplete ? 'active' : 'locked',
+    },
+  ]
+  const nextAction = session.ending
+    ? 'This witness has closed the archive. Restart to explore the other ending.'
+    : !has(session, 'clock-0317') || !has(session, 'postmark-0317')
+      ? 'Open the maintenance log and the news clipping. The same timestamp appears twice.'
+      : !has(session, 'repeat-is-local')
+        ? 'Run COMPARE CLOCKS in the relay terminal.'
+        : !has(session, 'archivist-redaction-key')
+          ? 'Ask Mara about the small triangle in the margins.'
+          : !has(session, 'crew-survived')
+            ? 'Follow the triangle to the sealed departure packet.'
+            : !has(session, 'maintenance-signature')
+              ? 'Ask Ilya whether blue was really weather interference.'
+              : !has(session, 'quarantine-reason')
+                ? 'Ask Ilya why the relay stayed dark.'
+                : !has(session, 'reporter-confirmation') && !has(session, 'archivist-request')
+                  ? 'Choose a witness: Noor can corroborate, or Mara can request privacy.'
+                  : !has(session, 'decision-ready')
+                    ? 'Run AUDIT PACKET in the relay terminal.'
+                    : 'Choose the ending that matches your witness.'
+  const total = beats.reduce((sum, beat) => sum + beat.clueIds.length, 0)
+  const discovered = beats.reduce((sum, beat) => sum + beat.discovered, 0)
+  return { nextAction, progress: Math.round((discovered / total) * 100), beats }
 }
 
 export function isDocumentAvailable(session: Session, documentId: string) {
