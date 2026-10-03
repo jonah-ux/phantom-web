@@ -23,6 +23,12 @@ function titleFor(documentId: string) {
   return CORPUS.documents.find(document => document.id === documentId)?.title ?? documentId
 }
 
+function requirementLabel(documentId: string) {
+  const page = CORPUS.documents.find(document => document.id === documentId)
+  if (!page || page.requiresClues.length === 0) return ''
+  return page.requiresClues.map(clueId => CANON.clues.find(clue => clue.id === clueId)?.title ?? clueId).join(' + ')
+}
+
 function App() {
   const [initial] = useState(restoreSession)
   const [session, setSession] = useState(initial.session)
@@ -164,7 +170,7 @@ function App() {
           <ul className="page-list">
             {(query ? results : CORPUS.documents).map(page => {
               const unlocked = page.requiresClues.every(clue => session.discoveredClues.includes(clue))
-              return <li key={page.id}><button className={page.id === document.id ? 'page-link selected' : 'page-link'} onClick={() => open(page.id)} disabled={!unlocked}><span>{unlocked ? '●' : '○'}</span>{page.title}</button></li>
+              return <li key={page.id}><button className={page.id === document.id ? 'page-link selected' : 'page-link'} onClick={() => open(page.id)} disabled={!unlocked} aria-label={unlocked ? page.title : `${page.title}; locked until ${requirementLabel(page.id)}`}><span>{unlocked ? '●' : '○'}</span>{page.title}</button>{!unlocked && <small className="lock-reason">Requires: {requirementLabel(page.id)}</small>}</li>
             })}
           </ul>
           {query && results.length === 0 && <p className="muted">No authored page matches that term.</p>}
@@ -199,7 +205,7 @@ function App() {
         <h2>{document.title}</h2>
         <div className="document-body">{document.body}</div>
         <div className="document-actions"><button onClick={saveCurrent} disabled={session.evidence.some(entry => entry.documentId === document.id)}>{session.evidence.some(entry => entry.documentId === document.id) ? 'Source saved' : 'Save source to notebook'}</button><button className="secondary" onClick={() => setMessage(`Public facts on this page: ${document.facts.join(', ')}.`)}>Show public tags</button></div>
-        <div className="linked-pages"><h3>Linked pages</h3>{document.links.map(link => <button key={link} className="link-button" onClick={() => open(link)} disabled={!CORPUS.documents.find(page => page.id === link)!.requiresClues.every(clue => session.discoveredClues.includes(clue))}>{titleFor(link)}</button>)}</div>
+        <div className="linked-pages"><h3>Linked pages</h3>{document.links.map(link => { const unlocked = CORPUS.documents.find(page => page.id === link)!.requiresClues.every(clue => session.discoveredClues.includes(clue)); return <div key={link} className="linked-page"><button className="link-button" onClick={() => open(link)} disabled={!unlocked}>{titleFor(link)}</button>{!unlocked && <small className="lock-reason">Requires: {requirementLabel(link)}</small>}</div> })}</div>
       </article>
 
       <aside className="inspector">
