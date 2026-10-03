@@ -16,6 +16,8 @@ A single Vite/React/TypeScript application with independent npm dependencies and
 
 A future server adapter must keep credentials outside the browser bundle, bound request size and time, support cancellation, and return this schema. Timeouts, malformed responses, and reloads must leave the local session available for a safe retry. Generated prose can add flavor but cannot become canon automatically.
 
+`src/live-adapter.ts` is the browser-side transport boundary. `buildLiveRequest` includes only the selected character's discovered clue text, recent authored page IDs, and that character's bounded dialogue memory. `requestLiveResponse` enforces an endpoint, JSON envelope, timeout, external cancellation, and response schema before returning a proposal to `applyModelProposal`. An unset endpoint returns `unavailable` and keeps the prepared route complete.
+
 ## Session boundary
 
 Saves carry `storyId`, `canonVersion`, a schema version, visited pages, tabs/history, discovered clues, sourced evidence and annotations, character memory, hint count, deterministic events, and an optional ending. `readSession` rejects malformed, incompatible, unknown-reference, duplicate-event, and unsupported-ending data without partial import. The UI has explicit restart and author-reveal controls; restart clears only this fictional local session.

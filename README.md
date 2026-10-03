@@ -4,13 +4,13 @@
 
 A fictional internet with a coherent, interactive mystery.
 
-**Status: first prepared mystery slice is playable. Live AI and public deployment remain optional follow-on work.**
+**Status: first prepared mystery slice is playable and the optional live adapter seam is typed. Live AI and public deployment remain unverified follow-on work.**
 
 ## What runs now
 
 The Astra Relay story is a complete no-key investigation with twelve authored pages, a versioned canon, a dependency-checked clue graph, three witnesses, a local terminal, a hint ladder, source-linked notebook annotations, save/load, and two engine-gated endings. The interface is an app-contained fictional browser: it never contacts the real internet while you investigate.
 
-Prepared character responses are labeled `LOCAL / NO-KEY` and cannot mutate the story outside the engine's authorized clue actions. No model credentials are required. A future provider adapter must remain server-side and optional.
+Prepared character responses are labeled `LOCAL / NO-KEY` and cannot mutate the story outside the engine's authorized clue actions. The header also exposes `LIVE ADAPTER`; it is visibly unavailable until `VITE_PHANTOM_LIVE_ENDPOINT` points at a server route that returns the typed response envelope. No model credentials are required in the browser.
 
 ## Start locally
 
@@ -45,7 +45,7 @@ The public source contains spoiler material in [AUTHOR-GUIDE.md](docs/AUTHOR-GUI
 
 `src/canon.ts` owns the immutable Astra Relay facts, chronology, clue graph, character knowledge, disclosure gates, hints, and ending requirements. `src/corpus.json` owns the authored fictional pages and their document-level gates. `src/engine.ts` is the only writer for session progression, evidence, dialogue memory, terminal effects, hints, saves, and endings. `src/App.tsx` renders the fictional browser and prepared experience.
 
-The engine validates every document, clue, source, prerequisite, model proposal, and imported session. A character can suggest text and a permitted clue, but cannot unlock a page, set an ending, invent a clue, or rewrite the canon. Model output is currently fixture-only; there is no provider call in this repository.
+The engine validates every document, clue, source, prerequisite, model proposal, and imported session. A character can suggest text and a permitted clue, but cannot unlock a page, set an ending, invent a clue, or rewrite the canon. `src/live-adapter.ts` can send a bounded prompt plus discovered, character-permitted context to an optional same-origin server route; malformed, cancelled, timed-out, or unauthorized responses leave the investigation unchanged. No provider call is configured in this repository.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the data boundaries and [NEXT-STEPS.md](docs/NEXT-STEPS.md) for the remaining release work.
 
