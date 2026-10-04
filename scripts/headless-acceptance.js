@@ -43,7 +43,7 @@ async page => {
   };
   const openControls = async () => {
     const details = page.locator('details');
-    if (!(await details.getAttribute('open'))) await details.locator('summary').click();
+    if (await details.getAttribute('open') === null) await details.locator('summary').click();
   };
   const routeToComparison = async () => {
     await openPage('Staff directory / last roster');
@@ -141,6 +141,14 @@ async page => {
   const restoredNote = await page.getByRole('region', { name: 'NOTEBOOK' }).getByRole('textbox', { name: 'Note for Maintenance log / receiver bay', exact: true }).inputValue();
   check(restoredNote === 'The blue channel is the lead.', `Notebook note did not survive reload; inputValue=${JSON.stringify(restoredNote)}`);
   check(notebookAfterReload.includes('Connected clues stay with this source after reload.'), `Notebook clue connection did not survive reload; rendered=${JSON.stringify(notebookAfterReload)}`);
+  await openControls();
+  await page.getByRole('button', { name: 'Prepare current save', exact: true }).click();
+  const noteSaveA = await sessionSave().inputValue();
+  const noteSaveB = await page.evaluate(raw => { const parsed = JSON.parse(raw); parsed.evidence[0].note = 'NOTE B'; return JSON.stringify(parsed); }, noteSaveA);
+  await sessionSave().fill(noteSaveB);
+  await page.getByRole('button', { name: 'Restore save', exact: true }).click();
+  const importedNote = await page.getByRole('region', { name: 'NOTEBOOK' }).getByRole('textbox', { name: 'Note for Maintenance log / receiver bay', exact: true }).inputValue();
+  check(importedNote === 'NOTE B', `Same-ID imported note did not re-render; inputValue=${JSON.stringify(importedNote)}`);
   await openControls();
   await page.getByRole('button', { name: 'Prepare current save', exact: true }).click();
   const midStorySave = await sessionSave().inputValue();
