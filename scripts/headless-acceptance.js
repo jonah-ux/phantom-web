@@ -1,5 +1,8 @@
 /* oxlint-disable no-unused-expressions */
 async page => {
+  const startingUrl = new URL(page.url());
+  const appUrl = `${startingUrl.origin}${startingUrl.pathname}`;
+  const configuredLiveAcceptance = startingUrl.searchParams.get('live') === '1';
   const failures = [];
   const consoleErrors = [];
   const pageErrors = [];
@@ -32,11 +35,18 @@ async page => {
     } catch (error) {
       throw new Error(`Opening ${title} failed after unlock readback ${JSON.stringify(beforeClick)}: ${String(error)}`);
     }
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      if (await button.getAttribute('aria-current') === 'page') break;
+      await page.waitForTimeout(50);
+    }
+    check(await button.getAttribute('aria-current') === 'page', `Archive selection did not commit: ${title}`);
     await page.locator('#document-title').waitFor({ state: 'visible' });
+    const renderedTitle = (await page.locator('#document-title').textContent()).trim();
+    check(renderedTitle === title, `Requested page did not render: expected ${title}, got ${renderedTitle}`);
   };
   const clueVisible = async title => ledger().getByText(title, { exact: true }).count();
   const reset = async () => {
-    await page.goto('http://127.0.0.1:5183/');
+    await page.goto(configuredLiveAcceptance ? `${appUrl}?live=1` : appUrl);
     await page.evaluate(() => localStorage.clear());
     await page.reload();
     await page.waitForLoadState('domcontentloaded');
@@ -44,6 +54,14 @@ async page => {
   const openControls = async () => {
     const details = page.locator('details');
     if (await details.getAttribute('open') === null) await details.locator('summary').click();
+  };
+  const waitForLiveMessage = async expected => {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const message = await page.locator('.live-message').textContent();
+      if ((message ?? '').includes(expected)) return;
+      await page.waitForTimeout(100);
+    }
+    throw new Error(`Live adapter message did not include ${expected}; got ${(await page.locator('.live-message').textContent()) ?? ''}`);
   };
   const routeToComparison = async () => {
     await openPage('Staff directory / last roster');
@@ -112,15 +130,39 @@ async page => {
   check((await status().innerText()).includes('Requires:'), 'Locked forum activation did not explain its prerequisites');
 
   await page.getByRole('button', { name: 'LIVE ADAPTER', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Question', exact: true }).fill('What can you tell me about the relay?');
-  await page.getByRole('button', { name: 'Ask live adapter', exact: true }).click();
-  check((await page.getByRole('status').innerText()).includes('No live adapter endpoint is configured'), 'No-key live fallback did not render');
+  if (configuredLiveAcceptance) {
+    check((await page.getByLabel('fictional session identity').innerText()).includes('LIVE / OPTIONAL'), 'Configured live adapter did not advertise its endpoint');
+  } else {
+    await page.getByRole('textbox', { name: 'Question', exact: true }).fill('What can you tell me about the relay?');
+    await page.getByRole('button', { name: 'Ask live adapter', exact: true }).click();
+    check((await page.getByRole('status').innerText()).includes('No live adapter endpoint is configured'), 'No-key live fallback did not render');
+  }
   await page.getByRole('button', { name: 'PREPARED', exact: true }).click();
 
   await routeToComparison();
   await openPage('Relay forum / Is 03:17 an arrival?');
   check((await page.locator('#document-title').innerText()).includes('Is 03:17 an arrival?'), 'Unlocked forum did not render');
   await page.screenshot({ path: 'output/playwright/headless-comparison.png', fullPage: false });
+
+  if (configuredLiveAcceptance) {
+    await routeToPacket();
+    await page.getByRole('button', { name: 'LIVE ADAPTER', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Question', exact: true }).fill('What does the live seam know?');
+    await page.getByRole('button', { name: 'Ask live adapter', exact: true }).click();
+    await waitForLiveMessage('Fixture response accepted');
+    check((await witnesses().getByRole('log', { name: 'Conversation with Mara Vale' }).innerText()).includes('LIVE RESPONSE'), 'Configured live response did not enter the transcript');
+    check((await status().innerText()).includes('9 clues in the ledger'), `Configured live response changed the story outside the engine: ${(await status().innerText())}`);
+
+    await page.getByRole('textbox', { name: 'Question', exact: true }).fill('MALFORMED');
+    await page.getByRole('button', { name: 'Ask live adapter', exact: true }).click();
+    await waitForLiveMessage('unsupported structured response');
+    check((await witnesses().getByRole('log', { name: 'Conversation with Mara Vale' }).innerText()).split('LIVE RESPONSE').length - 1 === 1, 'Malformed live response changed the transcript');
+
+    await page.getByRole('textbox', { name: 'Question', exact: true }).fill('FORBIDDEN');
+    await page.getByRole('button', { name: 'Ask live adapter', exact: true }).click();
+    await waitForLiveMessage('engine rejected');
+    check((await status().innerText()).includes('9 clues in the ledger'), `Forbidden live action changed the story outside the engine: ${(await status().innerText())}`);
+  }
 
   await openControls();
   await openPage('Maintenance log / receiver bay');
@@ -152,12 +194,13 @@ async page => {
   await openControls();
   await page.getByRole('button', { name: 'Prepare current save', exact: true }).click();
   const midStorySave = await sessionSave().inputValue();
+  const midStoryClueCount = (await browserState()).clues.length;
   check(midStorySave.includes('phantom-web/session/v1'), 'Prepared save does not contain the session schema');
   await page.getByRole('button', { name: 'Restart investigation', exact: true }).click();
   check((await status().innerText()).includes('0 clues in the ledger'), 'Restart did not clear the investigation');
   await sessionSave().fill(midStorySave);
   await page.getByRole('button', { name: 'Restore save', exact: true }).click();
-  check((await status().innerText()).includes('5 clues in the ledger'), 'Restored save did not recover discovered clues');
+  check((await status().innerText()).includes(`${midStoryClueCount} clues in the ledger`), 'Restored save did not recover discovered clues');
   const restoredState = await page.evaluate(() => localStorage.getItem('phantom-web:session:v1'));
   await sessionSave().fill('{not a phantom save');
   await page.getByRole('button', { name: 'Restore save', exact: true }).click();

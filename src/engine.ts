@@ -333,8 +333,17 @@ export function recordLiveDialogue(session: Session, characterId: CharacterId, p
   const cleanResponse = response.trim().slice(0, 2000)
   if (!character || !cleanPrompt || !cleanResponse) return { session, changed: false, message: 'The live dialogue could not be recorded.' }
   const next = clone(session)
+  const memoryIds = (next.characterMemory[characterId] ?? [])
+    .filter(turn => turn.mode === 'live' || turn.mode === 'live-fixture')
+    .map(turn => Number(turn.disclosureId.replace('live-', '')))
+    .filter(Number.isInteger)
+  const eventIds = next.events
+    .filter(event => event.type === 'dialogue' && event.id.startsWith(`dialogue:${characterId}:live-`))
+    .map(event => Number(event.id.replace(`dialogue:${characterId}:live-`, '')))
+    .filter(Number.isInteger)
+  const nextLiveNumber = Math.max(0, ...memoryIds, ...eventIds) + 1
   const turn: DialogueTurn = {
-    disclosureId: `live-${(next.characterMemory[characterId] ?? []).length + 1}`,
+    disclosureId: `live-${nextLiveNumber}`,
     prompt: cleanPrompt,
     response: cleanResponse,
     mode: 'live',

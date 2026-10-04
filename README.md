@@ -33,15 +33,14 @@ npm run verify
 
 This runs lint, TypeScript, canon/engine checks, and the production build. CI runs the same command after a locked install. Browser acceptance is additional product proof; a build alone is not that proof.
 
-For the repeatable browser gate, start the local app and run [`scripts/headless-acceptance.js`](scripts/headless-acceptance.js) in a named Playwright Chromium session:
+For the repeatable browser gate, run [`npm run test:browser`](package.json). It starts a disposable Vite app, a deterministic fixture for the optional live adapter, and a headless Playwright Chromium session:
 
 ```sh
-npm run dev -- --port 5183
-PLAYWRIGHT_CLI_SESSION=phantom-web-acceptance npx --yes --package @playwright/cli playwright-cli open http://127.0.0.1:5183/
-PLAYWRIGHT_CLI_SESSION=phantom-web-acceptance npx --yes --package @playwright/cli playwright-cli run-code --filename scripts/headless-acceptance.js
+npx --yes --package @playwright/cli@0.1.22 playwright-cli install-browser chromium
+npm run test:browser
 ```
 
-The headless flow starts from a cleared local session, uses visible roles and text to exercise the archive, comparison terminal, witnesses, notebook, saves, hints, both endings, and the optional live fallback, then checks the 320px layout, ARIA references, reduced-motion CSS, failed requests, console errors, and page errors. It does not claim VoiceOver/NVDA behavior, other browser engines, a configured provider, or a public deployment. See [HEADLESS-ACCEPTANCE.md](docs/HEADLESS-ACCEPTANCE.md) for the evidence boundary.
+The headless flow starts from a cleared local session, uses visible roles and text to exercise the archive, comparison terminal, witnesses, notebook, saves, hints, both endings, and both unavailable and fixture-configured live paths. It checks malformed and forbidden live proposals, the 320px layout, ARIA references, reduced-motion CSS, failed requests, console errors, and page errors. It does not claim VoiceOver/NVDA behavior, other browser engines, a real provider, or a public deployment. See [HEADLESS-ACCEPTANCE.md](docs/HEADLESS-ACCEPTANCE.md) for the evidence boundary.
 
 ## Keyboard and small screens
 
