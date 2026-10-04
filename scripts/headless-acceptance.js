@@ -1,3 +1,4 @@
+/* oxlint-disable no-unused-expressions */
 async page => {
   const failures = [];
   const consoleErrors = [];
