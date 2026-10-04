@@ -6,7 +6,7 @@ The first vertical slice now includes the authored Astra Relay canon, chronology
 
 ## Remaining release work
 
-- Exercise the running browser from an empty local session and capture visible proof for navigation, search, notebook reload, prepared dialogue, hints, and each ending.
+- Exercise the running browser from an empty local session and capture visible proof for navigation, search, notebook reload, prepared dialogue, hints, and each ending. The repeatable headless Chromium flow is now in [`scripts/headless-acceptance.js`](../scripts/headless-acceptance.js) and its evidence boundary is documented in [`HEADLESS-ACCEPTANCE.md`](HEADLESS-ACCEPTANCE.md).
 - Point `VITE_PHANTOM_LIVE_ENDPOINT` at an authorized server-side provider route, then prove one real configured conversation through the typed adapter. Keep the prepared route as the no-key fallback and repeat timeout/cancellation, forbidden-claim, and safe-retry checks against the live route.
 - Add a spoiler-conscious demo recording, clean-clone installation proof, spoken screen-reader and Safari/Firefox acceptance, and release notes. The targeted Chromium keyboard and 320px layout pass covers focusable page gates, document focus, named tools, save export, and the no-endpoint live fallback; it does not establish full assistive-technology conformance. Hosting/public deployment remains a separate owner action.
 - Reconcile the first focused pull request against current `main`, then continue feature slices on new `codex/` branches. Do not treat this local worktree, a green build, or a draft PR as a deployed release.

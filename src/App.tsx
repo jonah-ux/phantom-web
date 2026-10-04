@@ -46,6 +46,7 @@ function App() {
   const [clueFilter, setClueFilter] = useState('')
   const documentTitleRef = useRef<HTMLHeadingElement>(null)
   const focusDocumentAfterOpen = useRef(false)
+  const noteDrafts = useRef<Record<string, string>>({})
 
   const document = CORPUS.documents.find(page => page.id === session.activeDocument) ?? CORPUS.documents[0]
   const results = useMemo(() => searchCorpus(CORPUS, query), [query])
@@ -83,6 +84,7 @@ function App() {
 
   function restart() {
     const fresh = openDocument(createEmptySession(), 'welcome').session
+    noteDrafts.current = {}
     setSession(fresh)
     try { localStorage.setItem(storageKey, writeSession(fresh)) } catch { /* Keep the fresh tab usable without storage. */ }
     setHintText('')
@@ -93,6 +95,7 @@ function App() {
   function importSave() {
     try {
       const imported = readSession(importText)
+      noteDrafts.current = {}
       setSession(imported)
       try { localStorage.setItem(storageKey, writeSession(imported)) } catch { /* Keep the imported session in memory. */ }
       setMessage('Saved investigation restored. Clues, notebook entries, and character memory are intact.')
@@ -105,6 +108,14 @@ function App() {
   function ask(characterId: CharacterId, disclosureId: string) {
     const transition = askCharacter(session, characterId, disclosureId)
     applyTransition(transition)
+  }
+
+  function connectNotebookClue(evidenceId: string, clueId: string) {
+    const entry = session.evidence.find(item => item.id === evidenceId)
+    if (!entry) return
+    const note = noteDrafts.current[evidenceId] ?? entry.note
+    const annotated = annotateEvidence(session, evidenceId, note, entry.highlighted)
+    applyTransition(connectEvidence(annotated.session, evidenceId, clueId))
   }
 
   async function askLive() {
@@ -210,9 +221,9 @@ function App() {
               return <li key={entry.id}>
                 <button className="notebook-link" onClick={() => open(entry.documentId)}>{titleFor(entry.documentId)}</button>
                 <blockquote>{entry.quote}</blockquote>
-                <textarea aria-label={`Note for ${titleFor(entry.documentId)}`} defaultValue={entry.note} placeholder="Why does this matter?" onBlur={event => applyTransition(annotateEvidence(session, entry.id, event.currentTarget.value, entry.highlighted))} />
-                <label className="check-row"><input type="checkbox" checked={entry.highlighted} onChange={event => applyTransition(annotateEvidence(session, entry.id, entry.note, event.currentTarget.checked))} /> flag as suspicious</label>
-                <div className="connection-row">{visibleClues.map(clue => <button key={clue.id} className={entry.connectedClueIds.includes(clue.id) ? 'chip chip-on' : 'chip'} onClick={() => applyTransition(connectEvidence(session, entry.id, clue.id))}><strong>{entry.connectedClueIds.includes(clue.id) ? '✓ ' : ''}{clue.title}</strong><small>{clue.kind}</small></button>)}</div>
+                <textarea aria-label={`Note for ${titleFor(entry.documentId)}`} defaultValue={entry.note} placeholder="Why does this matter?" onChange={event => { noteDrafts.current[entry.id] = event.currentTarget.value }} onBlur={event => applyTransition(annotateEvidence(session, entry.id, noteDrafts.current[entry.id] ?? event.currentTarget.value, entry.highlighted))} />
+                <label className="check-row"><input type="checkbox" checked={entry.highlighted} onChange={event => applyTransition(annotateEvidence(session, entry.id, noteDrafts.current[entry.id] ?? entry.note, event.currentTarget.checked))} /> flag as suspicious</label>
+                <div className="connection-row">{visibleClues.map(clue => <button key={clue.id} className={entry.connectedClueIds.includes(clue.id) ? 'chip chip-on' : 'chip'} onClick={() => connectNotebookClue(entry.id, clue.id)}><strong>{entry.connectedClueIds.includes(clue.id) ? '✓ ' : ''}{clue.title}</strong><small>{clue.kind}</small></button>)}</div>
                 {entry.connectedClueIds.length > 0 && <p className="connected-note">Connected clues stay with this source after reload.</p>}
               </li>
             })}
