@@ -32,6 +32,8 @@ function requirementLabel(documentId: string) {
 function App() {
   const [initial] = useState(restoreSession)
   const [session, setSession] = useState(initial.session)
+  const sessionRef = useRef(initial.session)
+  const liveRequest = useRef<AbortController | null>(null)
   const [message, setMessage] = useState(initial.message)
   const [query, setQuery] = useState('')
   const [hintText, setHintText] = useState('')
@@ -46,7 +48,8 @@ function App() {
   const [clueFilter, setClueFilter] = useState('')
   const documentTitleRef = useRef<HTMLHeadingElement>(null)
   const focusDocumentAfterOpen = useRef(false)
-  const noteDrafts = useRef<Record<string, string>>({})
+
+  useEffect(() => () => liveRequest.current?.abort(), [])
 
   const document = CORPUS.documents.find(page => page.id === session.activeDocument) ?? CORPUS.documents[0]
   const results = useMemo(() => searchCorpus(CORPUS, query), [query])
@@ -61,10 +64,18 @@ function App() {
   }, [session])
 
   function applyTransition<T>(transition: { session: Session; message: string; value?: T }) {
+    if (transition.session !== sessionRef.current && liveRequest.current) {
+      liveRequest.current.abort()
+      liveRequest.current = null
+      setLiveBusy(false)
+      setLiveMessage('The investigation changed. The pending live reply was cancelled; ask again with the current evidence.')
+    }
+    sessionRef.current = transition.session
     setSession(transition.session)
+    let detail = transition.message
     try { localStorage.setItem(storageKey, writeSession(transition.session)) }
-    catch { setMessage('This session is playable, but local storage is unavailable. Your current tab remains active.') }
-    setMessage(transition.message)
+    catch { detail += ' This session is playable, but it could not be saved locally. Export it before closing this tab.' }
+    setMessage(detail)
   }
 
   function open(documentId: string) {
@@ -84,21 +95,19 @@ function App() {
 
   function restart() {
     const fresh = openDocument(createEmptySession(), 'welcome').session
-    noteDrafts.current = {}
-    setSession(fresh)
-    try { localStorage.setItem(storageKey, writeSession(fresh)) } catch { /* Keep the fresh tab usable without storage. */ }
+    applyTransition({ session: fresh, message: 'New investigation started. The archive has no memory of the previous witness.' })
     setHintText('')
     setSolutionVisible(false)
-    setMessage('New investigation started. The archive has no memory of the previous witness.')
+    setLiveMessage('')
   }
 
   function importSave() {
     try {
       const imported = readSession(importText)
-      noteDrafts.current = {}
-      setSession(imported)
-      try { localStorage.setItem(storageKey, writeSession(imported)) } catch { /* Keep the imported session in memory. */ }
-      setMessage('Saved investigation restored. Clues, notebook entries, and character memory are intact.')
+      applyTransition({ session: imported, message: 'Saved investigation restored. Clues, notebook entries, and character memory are intact.' })
+      setHintText('')
+      setSolutionVisible(false)
+      setLiveMessage('')
       setImportText('')
     } catch {
       setMessage('That save was rejected. The current investigation was left untouched.')
@@ -111,11 +120,8 @@ function App() {
   }
 
   function connectNotebookClue(evidenceId: string, clueId: string) {
-    const entry = session.evidence.find(item => item.id === evidenceId)
-    if (!entry) return
-    const note = noteDrafts.current[evidenceId] ?? entry.note
-    const annotated = annotateEvidence(session, evidenceId, note, entry.highlighted)
-    applyTransition(connectEvidence(annotated.session, evidenceId, clueId))
+    const current = sessionRef.current
+    applyTransition(connectEvidence(current, evidenceId, clueId))
   }
 
   async function askLive() {
@@ -123,17 +129,32 @@ function App() {
     if (!prompt || liveBusy) return
     setLiveBusy(true)
     setLiveMessage('Contacting the optional live adapter…')
-    const result = await requestLiveResponse({ endpoint: liveEndpoint, session, characterId: liveCharacterId, prompt })
+    const snapshot = sessionRef.current
+    const characterId = liveCharacterId
+    const controller = new AbortController()
+    liveRequest.current = controller
+    try {
+    const result = await requestLiveResponse({ endpoint: liveEndpoint, session: snapshot, characterId, prompt, signal: controller.signal })
+    // A reply belongs only to the evidence snapshot that was sent.
+    if (controller.signal.aborted || liveRequest.current !== controller || sessionRef.current !== snapshot) return
     if (result.status === 'ok' && result.proposal) {
-      const applied = applyModelProposal(session, liveCharacterId, result.proposal)
+      const applied = applyModelProposal(snapshot, characterId, result.proposal)
       if (applied.accepted) {
-        const recorded = recordLiveDialogue(applied.session, liveCharacterId, prompt, result.proposal.text)
-        setSession(recorded.session)
-        try { localStorage.setItem(storageKey, writeSession(recorded.session)) } catch { /* The live response remains visible in this tab. */ }
+        const recorded = recordLiveDialogue(applied.session, characterId, prompt, result.proposal.text)
+        liveRequest.current = null
+        applyTransition(recorded)
+        setLiveBusy(false)
         setLiveMessage(`${result.detail} ${result.proposal.text}`)
       } else setLiveMessage(`The engine rejected the live proposal: ${applied.errors.join('; ')}`)
     } else setLiveMessage(result.detail)
-    setLiveBusy(false)
+    } catch {
+      if (liveRequest.current === controller) setLiveMessage('The live reply could not be applied. Your investigation was not changed; retry is safe.')
+    } finally {
+      if (liveRequest.current === controller) {
+        liveRequest.current = null
+        setLiveBusy(false)
+      }
+    }
   }
 
   function useHint() {
@@ -221,8 +242,8 @@ function App() {
               return <li key={entry.id}>
                 <button className="notebook-link" onClick={() => open(entry.documentId)}>{titleFor(entry.documentId)}</button>
                 <blockquote>{entry.quote}</blockquote>
-                <textarea key={`${entry.id}:${entry.note}`} aria-label={`Note for ${titleFor(entry.documentId)}`} defaultValue={entry.note} placeholder="Why does this matter?" onChange={event => { noteDrafts.current[entry.id] = event.currentTarget.value }} onBlur={event => applyTransition(annotateEvidence(session, entry.id, noteDrafts.current[entry.id] ?? event.currentTarget.value, entry.highlighted))} />
-                <label className="check-row"><input type="checkbox" checked={entry.highlighted} onChange={event => applyTransition(annotateEvidence(session, entry.id, noteDrafts.current[entry.id] ?? entry.note, event.currentTarget.checked))} /> flag as suspicious</label>
+                <textarea aria-label={`Note for ${titleFor(entry.documentId)}`} value={entry.note} maxLength={500} placeholder="Why does this matter?" onChange={event => applyTransition(annotateEvidence(sessionRef.current, entry.id, event.currentTarget.value, entry.highlighted))} />
+                <label className="check-row"><input type="checkbox" checked={entry.highlighted} onChange={event => applyTransition(annotateEvidence(sessionRef.current, entry.id, entry.note, event.currentTarget.checked))} /> flag as suspicious</label>
                 <div className="connection-row">{visibleClues.map(clue => <button key={clue.id} className={entry.connectedClueIds.includes(clue.id) ? 'chip chip-on' : 'chip'} onClick={() => connectNotebookClue(entry.id, clue.id)}><strong>{entry.connectedClueIds.includes(clue.id) ? '✓ ' : ''}{clue.title}</strong><small>{clue.kind}</small></button>)}</div>
                 {entry.connectedClueIds.length > 0 && <p className="connected-note">Connected clues stay with this source after reload.</p>}
               </li>

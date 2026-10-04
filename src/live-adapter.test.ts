@@ -9,6 +9,17 @@ function preparedSession() {
 }
 
 describe('optional live character adapter', () => {
+  it('does not dispatch an already-cancelled or oversized request', async () => {
+    let calls = 0
+    const fetchImpl = async () => { calls += 1; return new Response('{}') }
+    const controller = new AbortController()
+    controller.abort()
+    const options = { endpoint: '/api/character', session: preparedSession(), characterId: 'mara' as const, prompt: 'Question', fetchImpl }
+    expect((await requestLiveResponse({ ...options, signal: controller.signal })).status).toBe('cancelled')
+    expect((await requestLiveResponse({ ...options, prompt: 'a'.repeat(1201) })).status).toBe('invalid-request')
+    expect(calls).toBe(0)
+  })
+
   it('sends only discovered clues permitted to the selected character', () => {
     const request = buildLiveRequest(preparedSession(), 'mara', 'What does the triangle mean?')
     expect(request.schema).toBe('phantom-web/live-character-request/v1')

@@ -92,7 +92,7 @@ const evidenceSchema = z.object({
 
 const dialogueSchema = z.object({
   disclosureId: id,
-  prompt: z.string().min(1).max(300),
+  prompt: z.string().min(1).max(1200),
   response: z.string().min(1).max(2000),
   mode: z.enum(['prepared', 'live', 'live-fixture']),
 }).strict()
@@ -243,6 +243,8 @@ export function getInvestigationBoard(session: Session): InvestigationBoard {
             ? 'Follow the triangle to the sealed departure packet.'
             : !has(session, 'maintenance-signature')
               ? 'Ask Ilya whether blue was really weather interference.'
+              : !has(session, 'shift-roster-gap')
+                ? 'Open the station directory to inspect the missing shift before asking Ilya why the relay stayed dark.'
               : !has(session, 'quarantine-reason')
                 ? 'Ask Ilya why the relay stayed dark.'
                 : !has(session, 'reporter-confirmation') && !has(session, 'archivist-request')
@@ -383,11 +385,13 @@ export function applyModelProposal(session: Session, characterId: CharacterId, r
     if (!findClue(claim)) errors.push(`unknown clue claim: ${claim}`)
     else if (!allowedClaims.has(claim)) errors.push(`forbidden clue claim: ${claim}`)
   }
+  const rewardedClues = new Set<string>()
   for (const action of proposal.actions) {
     const disclosure = accessible.find(item => item.id === action.disclosureId)
     if (!findClue(action.clueId)) errors.push(`unknown clue action: ${action.clueId}`)
     if (!disclosure || disclosure.reveals !== action.clueId) errors.push(`unauthorized clue action: ${action.clueId}`)
-    if (has(session, action.clueId)) errors.push(`duplicate clue reward: ${action.clueId}`)
+    if (has(session, action.clueId) || rewardedClues.has(action.clueId)) errors.push(`duplicate clue reward: ${action.clueId}`)
+    rewardedClues.add(action.clueId)
   }
   if (errors.length > 0) return { accepted: false, session, text: '', errors }
   const next = clone(session)
@@ -426,10 +430,25 @@ function validateSessionReferences(session: Session) {
   if (session.discoveredClues.some(clue => !clues.has(clue))) errors.push('session refers to an unknown clue')
   if (new Set(session.discoveredClues).size !== session.discoveredClues.length) errors.push('session has duplicate clues')
   if (new Set(session.events.map(event => event.id)).size !== session.events.length) errors.push('session has duplicate event ids')
+  if (new Set(session.evidence.map(entry => entry.id)).size !== session.evidence.length) errors.push('session has duplicate evidence ids')
   for (const entry of session.evidence) {
-    if (!documents.has(entry.documentId)) errors.push('evidence refers to an unknown document')
+    const document = findDocument(entry.documentId)
+    if (!document) errors.push('evidence refers to an unknown document')
+    else if (!document.body.includes(entry.quote)) errors.push('evidence is not a passage from its authored source')
     if (entry.connectedClueIds.some(clue => !clues.has(clue))) errors.push('evidence refers to an unknown clue')
   }
+  for (const [characterId, turns] of Object.entries(session.characterMemory)) {
+    const character = findCharacter(characterId)
+    if (!character) { errors.push('dialogue refers to an unknown character'); continue }
+    for (const turn of turns) {
+      if (turn.mode === 'live') {
+        if (!/^live-\d+$/.test(turn.disclosureId)) errors.push('live dialogue has an unknown reference')
+      } else if (!character.disclosures.some(disclosure => disclosure.id === turn.disclosureId)) {
+        errors.push('dialogue refers to an unknown disclosure')
+      }
+    }
+  }
+  if (session.phase === 'complete' && !session.ending) errors.push('complete session must have an ending')
   if (session.ending) {
     const ending = findEnding(session.ending)
     if (!ending || !requirementsMet(session, ending.requires)) errors.push('session ending is not supported by discovered evidence')
@@ -449,6 +468,7 @@ export function writeSession(session: Session) {
 
 export function readSession(raw: string | null): Session {
   if (raw === null) return createEmptySession()
+  if (raw.length > 100_000) throw new Error('session save exceeds the 100 KB limit')
   const session = SessionSchema.parse(JSON.parse(raw))
   const errors = validateSessionReferences(session)
   if (errors.length > 0) throw new Error(errors.join('; '))
