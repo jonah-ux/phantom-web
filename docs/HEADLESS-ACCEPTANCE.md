@@ -15,7 +15,7 @@ The script uses role, label, and visible-text locators for product actions. It o
 
 - fresh startup, prepared no-key mode, skip link, search announcements, hint rendering, locked-page keyboard activation, and the unavailable live-adapter fallback;
 - the authored route through comparison, Mara, Ilya, the sealed packet, Noor, and the final terminal audit;
-- source save, notebook annotation, clue connection, reload persistence, valid save restore, malformed-save refusal, and safe restart;
+- source save, notebook annotation, clue connection, reload persistence, same-ID import replacement (`NOTE A` → `NOTE B`), valid save restore, malformed-save refusal, and safe restart;
 - both “Wake the relay” and “Keep the harbor quiet” endings;
 - 320px horizontal overflow, ARIA reference targets, reduced-motion transition output, failed network requests, browser console errors, and page errors.
 
