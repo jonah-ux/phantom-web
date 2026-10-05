@@ -4,7 +4,7 @@
 
 A fictional internet with a coherent, interactive mystery.
 
-**Status: first prepared mystery slice is playable. Live AI and public deployment remain optional follow-on work.**
+**Status: runnable no-key mystery with a repeatable browser gate. Live AI integration remains optional, and the Pages workflow is ready for its first public deployment.**
 
 ## What runs now
 
@@ -22,6 +22,17 @@ npm run dev
 ```
 
 Open http://127.0.0.1:5174. Each of the three creative projects uses a different development port.
+
+## Public Pages build
+
+The repository includes a GitHub Pages workflow at [`.github/workflows/pages.yml`](.github/workflows/pages.yml). It builds with the `/phantom-web/` base path, checks the generated asset URLs, uploads the exact `dist/` artifact, and deploys it through the GitHub Pages environment. To reproduce the release artifact locally:
+
+```sh
+VITE_BASE_PATH=/phantom-web/ npm run build
+npm run check:pages
+```
+
+The workflow prepares deployment; a public URL is only considered adopted after the workflow run and `https://jonah-ux.github.io/phantom-web/` both read back successfully.
 
 ## Checks
 
