@@ -152,6 +152,19 @@ describe('prepared character and session safety boundaries', () => {
     expect(readSession(writeSession(session))).toEqual(session)
   })
 
+  it('keeps live dialogue event ids unique after the twenty-turn retention cap', () => {
+    let session = prepareBase('chronological')
+    for (let turn = 1; turn <= 22; turn += 1) {
+      session = recordLiveDialogue(session, 'mara', `Question ${turn}`, `Answer ${turn}`).session
+    }
+    const memory = session.characterMemory.mara.filter(turn => turn.mode === 'live')
+    const dialogueEvents = session.events.filter(event => event.type === 'dialogue' && event.id.startsWith('dialogue:mara:live-'))
+    expect(memory).toHaveLength(20)
+    expect(memory.map(turn => turn.disclosureId)).toEqual(Array.from({ length: 20 }, (_, index) => `live-${index + 3}`))
+    expect(new Set(dialogueEvents.map(event => event.id)).size).toBe(22)
+    expect(readSession(writeSession(session)).characterMemory.mara).toEqual(session.characterMemory.mara)
+  })
+
   it('accepts one permitted model clue and rejects forbidden or fabricated actions atomically', () => {
     const base = prepareBase('chronological')
     const valid = applyModelProposal(base, 'ilya', {
