@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5174 --strictPort",
     "build": "tsc -b && vite build",
+    "check:pages": "node scripts/check-pages-build.mjs",
     "lint": "oxlint --threads 2",
     "preview": "vite preview --host 127.0.0.1 --port 6174 --strictPort",
     "typecheck": "tsc -b --pretty false",

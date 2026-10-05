@@ -8,4 +8,4 @@ Three original sample documents, real corpus search, source-linked notebook pers
 
 Author the complete canon and clue graph, write the remaining pages, implement three character roles and disclosure gates, and prove two reachable endings before adding broad world generation.
 
-Use the complete [build prompt](BUILD-PROMPT.md) for sequencing and acceptance. Finish a coherent vertical slice before adding a platform, accounts, multiplayer, or billing. The no-key starter is an honest baseline; a real configured provider must be exercised separately before live AI is described as verified.
+Use the complete [build prompt](BUILD-PROMPT.md) for sequencing and acceptance. Finish a coherent vertical slice before adding a platform, accounts, multiplayer, or billing. The no-key starter is an honest baseline; a real configured provider must be exercised separately before live AI is described as verified. The repository now carries a reproducible GitHub Pages workflow; its workflow run and public URL still need separate readback before deployment is called adopted.
