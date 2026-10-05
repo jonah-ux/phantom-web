@@ -14,7 +14,7 @@ assertCanonValid()
 const storageId = z.string().regex(/^[a-z][a-z0-9:-]{0,79}$/)
 
 export type StoryPhase = 'investigating' | 'complete'
-export type EventType = 'document-opened' | 'clue-discovered' | 'dialogue' | 'terminal-command' | 'hint-used' | 'ending-reached'
+export type EventType = 'document-opened' | 'clue-discovered' | 'dialogue' | 'model-action' | 'terminal-command' | 'hint-used' | 'ending-reached'
 
 export interface EvidenceEntry {
   id: string
@@ -80,7 +80,7 @@ const dialogueSchema = z.object({
 
 const eventSchema = z.object({
   id: storageId,
-  type: z.enum(['document-opened', 'clue-discovered', 'dialogue', 'terminal-command', 'hint-used', 'ending-reached']),
+  type: z.enum(['document-opened', 'clue-discovered', 'dialogue', 'model-action', 'terminal-command', 'hint-used', 'ending-reached']),
   detail: z.string().min(1).max(300),
 }).strict()
 
@@ -298,15 +298,21 @@ export function applyModelProposal(session: Session, characterId: CharacterId, r
   }
   for (const action of proposal.actions) {
     const disclosure = accessible.find(item => item.id === action.disclosureId)
-    if (!findClue(action.clueId)) errors.push(`unknown clue action: ${action.clueId}`)
+    const clue = findClue(action.clueId)
+    if (!clue) errors.push(`unknown clue action: ${action.clueId}`)
     if (!disclosure || disclosure.reveals !== action.clueId) errors.push(`unauthorized clue action: ${action.clueId}`)
+    if (clue && !requirementsMet(session, clue.requires)) errors.push(`clue action prerequisites are not met: ${action.clueId}`)
     if (has(session, action.clueId)) errors.push(`duplicate clue reward: ${action.clueId}`)
     if (actionClues.has(action.clueId)) errors.push(`duplicate clue action: ${action.clueId}`)
     actionClues.add(action.clueId)
   }
   if (errors.length > 0) return { accepted: false, session, text: '', errors }
   const next = clone(session)
-  for (const action of proposal.actions) grantClue(next, action.clueId, `model:${characterId}:${action.disclosureId}`)
+  for (const action of proposal.actions) {
+    if (grantClue(next, action.clueId, `model:${characterId}:${action.disclosureId}`)) {
+      appendEvent(next, 'model-action', `${characterId}:${action.disclosureId}:${action.clueId}`, `model:${characterId}:${action.disclosureId}:${action.clueId}`)
+    }
+  }
   return { accepted: true, session: next, text: proposal.text, errors: [] }
 }
 
@@ -410,6 +416,27 @@ function validateSessionProvenance(session: Session) {
         if (disclosure.reveals) recordAward(disclosure.reveals, `character:${characterId}`, eventIndex, false)
         break
       }
+      case 'model-action': {
+        const parts = event.detail.split(':')
+        const characterId = parts[0] ?? ''
+        const disclosureId = parts[1] ?? ''
+        const clueId = parts[2] ?? ''
+        const character = findCharacter(characterId)
+        const disclosure = character?.disclosures.find(item => item.id === disclosureId)
+        const source = `model:${characterId}:${disclosureId}`
+        const stableId = `model:${characterId}:${disclosureId}:${clueId}`
+        if (parts.length !== 3 || event.id !== stableId) errors.push(`model action event has an invalid detail or id: ${event.detail}`)
+        if (!character || !disclosure || disclosure.reveals !== clueId) {
+          errors.push(`model action event is not authorized: ${event.detail}`)
+          break
+        }
+        if (!requirementsMet(replay, disclosure.requires)) {
+          errors.push(`model action event was used before its disclosure clues: ${event.detail}`)
+          break
+        }
+        recordAward(clueId, source, eventIndex, true)
+        break
+      }
       case 'terminal-command': {
         const command = event.detail
         const stableId = command === 'COMPARE CLOCKS'
@@ -463,18 +490,6 @@ function validateSessionProvenance(session: Session) {
           break
         }
         clueEvents.push({ ...parsed, eventIndex })
-        if (parsed.source.startsWith('model:')) {
-          const [, characterId, disclosureId] = parsed.source.split(':')
-          const character = findCharacter(characterId)
-          const disclosure = character?.disclosures.find(item => item.id === disclosureId)
-          if (!character || !disclosure || disclosure.reveals !== parsed.clueId) {
-            errors.push(`model clue event is not authorized: ${event.detail}`)
-          } else if (!requirementsMet(replay, disclosure.requires)) {
-            errors.push(`model clue event was used before its disclosure clues: ${event.detail}`)
-          } else {
-            recordAward(parsed.clueId, parsed.source, eventIndex, false)
-          }
-        }
         break
       }
     }
@@ -493,8 +508,7 @@ function validateSessionProvenance(session: Session) {
       continue
     }
     if (award.source !== clueEvent.source) errors.push(`clue event source does not match the authorized source: ${clueEvent.clueId}`)
-    const isSelfDescribingModelAward = award.source.startsWith('model:') && clueEvent.eventIndex === award.actionIndex
-    if (!isSelfDescribingModelAward && (award.clueBeforeAction ? clueEvent.eventIndex >= award.actionIndex : clueEvent.eventIndex <= award.actionIndex)) {
+    if (award.clueBeforeAction ? clueEvent.eventIndex >= award.actionIndex : clueEvent.eventIndex <= award.actionIndex) {
       errors.push(`clue event has an invalid action order: ${clueEvent.clueId}`)
     }
   }

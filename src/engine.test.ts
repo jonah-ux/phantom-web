@@ -182,6 +182,16 @@ describe('prepared character and session safety boundaries', () => {
       ],
     }
     expect(() => readSession(JSON.stringify(forgedReward))).toThrow(/provenance/)
+
+    const forgedModelReward = {
+      ...forgedBase,
+      discoveredClues: [...forgedBase.discoveredClues, 'maintenance-signature'],
+      events: [
+        ...forgedBase.events,
+        { id: 'clue:maintenance-signature', type: 'clue-discovered' as const, detail: 'maintenance-signature via model:ilya:ilya-signature' },
+      ],
+    }
+    expect(() => readSession(JSON.stringify(forgedModelReward))).toThrow(/provenance/)
     expect(() => writeSession({ ...createEmptySession(), phase: 'complete' })).toThrow(/ending/)
   })
 })
