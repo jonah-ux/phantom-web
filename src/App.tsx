@@ -1,48 +1,192 @@
-import { useState } from 'react'
-import source from './corpus.json'
-import { CorpusSchema, readNotebook, searchCorpus, writeNotebook } from './domain'
+import { useMemo, useState } from 'react'
+import { CANON, CORPUS } from './canon'
+import type { CharacterId } from './canon'
+import { annotateEvidence, askCharacter, chooseEnding, connectEvidence, createEmptySession, openDocument, readSession, requestHint, runTerminalCommand, saveEvidence, writeSession } from './engine'
+import type { Session } from './engine'
+import { searchCorpus } from './domain'
 import './App.css'
 
-const corpus = CorpusSchema.parse(source)
-const storageKey = 'phantom-web:notebook:v1'
+const storageKey = 'phantom-web:session:v1'
 
-function restore() {
-  try { return { entries: readNotebook(localStorage.getItem(storageKey), corpus), message: '' } }
-  catch { return { entries: [], message: 'The saved notebook could not be read. No imported progress was applied.' } }
+function restoreSession(): { session: Session; message: string } {
+  try {
+    return { session: readSession(localStorage.getItem(storageKey)), message: '' }
+  } catch {
+    return { session: createEmptySession(), message: 'The saved investigation could not be read. No imported progress was applied.' }
+  }
 }
 
-export default function App() {
-  const [initial] = useState(restore)
-  const [entries, setEntries] = useState(initial.entries)
+function titleFor(documentId: string) {
+  return CORPUS.documents.find(document => document.id === documentId)?.title ?? documentId
+}
+
+function App() {
+  const [initial] = useState(restoreSession)
+  const [session, setSession] = useState(initial.session)
   const [message, setMessage] = useState(initial.message)
   const [query, setQuery] = useState('')
-  const [selected, setSelected] = useState('welcome')
-  const document = corpus.documents.find(page => page.id === selected)!
-  const results = searchCorpus(corpus, query)
-  function save() {
-    if (entries.includes(selected)) return
-    const next = [...entries, selected]
+  const [hintText, setHintText] = useState('')
+  const [solutionVisible, setSolutionVisible] = useState(false)
+  const [importText, setImportText] = useState('')
+  const [freeQuestion, setFreeQuestion] = useState('')
+
+  const document = CORPUS.documents.find(page => page.id === session.activeDocument) ?? CORPUS.documents[0]
+  const results = useMemo(() => searchCorpus(CORPUS, query), [query])
+  const availableEndings = CANON.endings.filter(ending => ending.requires.every(clue => session.discoveredClues.includes(clue)))
+
+  function applyTransition<T>(transition: { session: Session; message: string; value?: T }) {
+    setSession(transition.session)
+    try { localStorage.setItem(storageKey, writeSession(transition.session)) }
+    catch { setMessage('This session is playable, but local storage is unavailable. Your current tab remains active.') }
+    setMessage(transition.message)
+  }
+
+  function open(documentId: string) {
+    applyTransition(openDocument(session, documentId))
+  }
+
+  function saveCurrent() {
+    applyTransition(saveEvidence(session, document.id, document.body.slice(0, 600)))
+  }
+
+  function restart() {
+    const fresh = openDocument(createEmptySession(), 'welcome').session
+    setSession(fresh)
+    try { localStorage.setItem(storageKey, writeSession(fresh)) } catch { /* Keep the fresh tab usable without storage. */ }
+    setHintText('')
+    setSolutionVisible(false)
+    setMessage('New investigation started. The archive has no memory of the previous witness.')
+  }
+
+  function importSave() {
     try {
-      localStorage.setItem(storageKey, writeNotebook(next, corpus))
-      setEntries(next)
-      setMessage('Source saved to your local notebook.')
-    } catch { setMessage('Local storage is unavailable. Your notebook was not changed.') }
+      const imported = readSession(importText)
+      setSession(imported)
+      try { localStorage.setItem(storageKey, writeSession(imported)) } catch { /* Keep the imported session in memory. */ }
+      setMessage('Saved investigation restored. Clues, notebook entries, and character memory are intact.')
+      setImportText('')
+    } catch {
+      setMessage('That save was rejected. The current investigation was left untouched.')
+    }
   }
-  function reset() {
-    try { localStorage.removeItem(storageKey); setEntries([]); setMessage('Notebook cleared.') }
-    catch { setMessage('Local storage is unavailable. Your notebook was not changed.') }
+
+  function ask(characterId: CharacterId, disclosureId: string) {
+    const transition = askCharacter(session, characterId, disclosureId)
+    applyTransition(transition)
   }
-  return <main>
-    <header><span className="eyebrow">PHANTOM WEB / FICTIONAL ARCHIVE STARTER</span><h1>The archive is awake.</h1><p>A fictional internet waiting for its first complete mystery.</p></header>
-    <div className="status">Three prepared documents · AI characters and ending logic are not implemented</div>
-    <div className="archive-layout">
-      <nav className="panel" aria-label="Archive search"><label htmlFor="search">Search the archive</label><input id="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Try 03:17" />
-        <ul>{results.map(page => <li key={page.id}><button className={selected === page.id ? 'selected' : 'secondary'} onClick={() => setSelected(page.id)}>{page.title}</button></li>)}</ul>
-        {results.length === 0 && <p>No matching documents.</p>}
-      </nav>
-      <article className="panel document"><span className="address">{document.address} · simulated address</span><h2>{document.title}</h2><p>{document.body}</p><button onClick={save} disabled={entries.includes(selected)}>{entries.includes(selected) ? 'Saved to notebook' : 'Save source to notebook'}</button><p role="status">{message}</p></article>
+
+  function askUnexpected(characterName: string) {
+    setMessage(`${characterName} is marked PREPARED in no-key mode. Ask one of the authored prompts; free-form live AI is an optional future adapter.`)
+    setFreeQuestion('')
+  }
+
+  function useHint() {
+    const transition = requestHint(session)
+    applyTransition(transition)
+    if (transition.value) setHintText(transition.value)
+  }
+
+  function terminal(command: string) {
+    applyTransition(runTerminalCommand(session, command))
+  }
+
+  function selectEnding(id: 'expose' | 'protect') {
+    applyTransition(chooseEnding(session, id))
+  }
+
+  return <main className="app-shell">
+    <header className="masthead">
+      <div>
+        <span className="eyebrow">PHANTOM WEB / ASTRA RELAY</span>
+        <h1>The archive is awake.</h1>
+        <p className="lede">A fictional internet mystery about a station that chose to disappear.</p>
+      </div>
+      <div className="session-identity" aria-label="fictional session identity">
+        <span>WITNESS SESSION</span>
+        <strong>LOCAL / NO-KEY</strong>
+        <small>Prepared responses are labeled. No real network or provider is contacted.</small>
+      </div>
+    </header>
+
+    <section className="status-bar" aria-live="polite">
+      <span><b>{session.discoveredClues.length}</b> clues in the ledger</span>
+      <span><b>{session.visitedDocuments.length}</b> pages opened</span>
+      <span>{session.phase === 'complete' ? 'ENDING RECORDED' : 'INVESTIGATION IN PROGRESS'}</span>
+      {message && <span className="status-message">{message}</span>}
+    </section>
+
+    <section className="browser panel" aria-label="Fictional browser">
+      <div className="browser-tabs">
+        <span className="browser-dot" aria-hidden="true" />
+        {session.tabs.map(tab => <button key={tab} className={tab === document.id ? 'tab tab-active' : 'tab'} onClick={() => open(tab)}>{titleFor(tab)}</button>)}
+        <button className="tab tab-add" onClick={() => open('welcome')} aria-label="Open a new archive tab">+</button>
+      </div>
+      <div className="address-bar"><span aria-hidden="true">⌁</span><span>{document.address}</span><small>simulated address · fiction only</small></div>
+      <div className="browser-history"><span>History:</span>{session.history.slice(-6).map((item, index) => <button key={`${item}-${index}`} onClick={() => open(item)}>{titleFor(item)}</button>)}</div>
+    </section>
+
+    <div className="workspace">
+      <aside className="sidebar">
+        <section className="panel archive-nav">
+          <div className="section-heading"><span>ARCHIVE INDEX</span><small>{CORPUS.documents.length} pages</small></div>
+          <label htmlFor="search">Search authored pages</label>
+          <input id="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Try 03:17 or harbor" />
+          <ul className="page-list">
+            {(query ? results : CORPUS.documents).map(page => {
+              const unlocked = page.requiresClues.every(clue => session.discoveredClues.includes(clue))
+              return <li key={page.id}><button className={page.id === document.id ? 'page-link selected' : 'page-link'} onClick={() => open(page.id)} disabled={!unlocked}><span>{unlocked ? '●' : '○'}</span>{page.title}</button></li>
+            })}
+          </ul>
+          {query && results.length === 0 && <p className="muted">No authored page matches that term.</p>}
+          <p className="nav-note">Locked pages open only when the story engine recognizes their prerequisite clues.</p>
+        </section>
+
+        <section className="panel notebook-panel">
+          <div className="section-heading"><span>NOTEBOOK</span><small>{session.evidence.length} sources</small></div>
+          {session.evidence.length === 0 && <p className="muted">Save a passage to keep its source and attach a note.</p>}
+          <ul className="notebook-list">
+            {session.evidence.map(entry => <li key={entry.id}><button className="notebook-link" onClick={() => open(entry.documentId)}>{titleFor(entry.documentId)}</button><blockquote>{entry.quote}</blockquote><textarea aria-label={`Note for ${titleFor(entry.documentId)}`} defaultValue={entry.note} placeholder="Why does this matter?" onBlur={event => applyTransition(annotateEvidence(session, entry.id, event.currentTarget.value, entry.highlighted))} /><label className="check-row"><input type="checkbox" checked={entry.highlighted} onChange={event => applyTransition(annotateEvidence(session, entry.id, entry.note, event.currentTarget.checked))} /> flag as suspicious</label><div className="connection-row">{session.discoveredClues.slice(0, 3).map(clueId => <button key={clueId} className={entry.connectedClueIds.includes(clueId) ? 'chip chip-on' : 'chip'} onClick={() => applyTransition(connectEvidence(session, entry.id, clueId))}>{clueId}</button>)}</div></li>)}
+          </ul>
+        </section>
+      </aside>
+
+      <article className={`document panel document--${document.style}`}>
+        <div className="document-meta"><span>{document.timestamp}</span><span>{document.style.replace('-', ' ')}</span></div>
+        <h2>{document.title}</h2>
+        <div className="document-body">{document.body}</div>
+        <div className="document-actions"><button onClick={saveCurrent} disabled={session.evidence.some(entry => entry.documentId === document.id)}>{session.evidence.some(entry => entry.documentId === document.id) ? 'Source saved' : 'Save source to notebook'}</button><button className="secondary" onClick={() => setMessage(`Public facts on this page: ${document.facts.join(', ')}.`)}>Show public tags</button></div>
+        <div className="linked-pages"><h3>Linked pages</h3>{document.links.map(link => <button key={link} className="link-button" onClick={() => open(link)} disabled={!CORPUS.documents.find(page => page.id === link)!.requiresClues.every(clue => session.discoveredClues.includes(clue))}>{titleFor(link)}</button>)}</div>
+      </article>
+
+      <aside className="inspector">
+        <section className="panel clue-panel">
+          <div className="section-heading"><span>CLUE LEDGER</span><small>{session.discoveredClues.length}/{CANON.clues.length}</small></div>
+          <div className="clue-grid">{session.discoveredClues.map(clueId => { const clue = CANON.clues.find(item => item.id === clueId)!; return <article key={clueId} className={clue.redHerring ? 'clue-card red-herring' : 'clue-card'}><span className="clue-kind">{clue.kind}</span><h3>{clue.title}</h3><p>{clue.text}</p>{clue.redHerring && <small>Intentional red herring · does not unlock an ending</small>}</article> })}</div>
+          {session.discoveredClues.length === 0 && <p className="muted">The ledger stays empty until you open an authored source.</p>}
+        </section>
+
+        <section className="panel people-panel">
+          <div className="section-heading"><span>WITNESSES</span><small>prepared mode</small></div>
+          <p className="muted">Each witness has a motive and a narrow disclosure gate. Their responses cannot change the canon on their own.</p>
+          {CANON.characters.map(character => { const ready = character.disclosures.some(disclosure => disclosure.requires.every(clue => session.discoveredClues.includes(clue))); return <article key={character.id} className={ready ? 'character-card ready' : 'character-card'}><div className="character-top"><div><h3>{character.name}</h3><span>{character.role}</span></div><b>{ready ? 'READY' : 'WAITING'}</b></div><p>{character.motive}</p><div className="character-prompts">{character.disclosures.map(disclosure => { const available = disclosure.requires.every(clue => session.discoveredClues.includes(clue)); const asked = session.characterMemory[character.id]?.some(turn => turn.disclosureId === disclosure.id); return <button key={disclosure.id} className="prompt-button" disabled={!available} onClick={() => ask(character.id, disclosure.id)}>{asked ? '✓ ' : ''}{disclosure.label}</button> })}</div><div className="free-question"><input value={freeQuestion} onChange={event => setFreeQuestion(event.target.value)} placeholder="Ask an unexpected question" /><button className="secondary" onClick={() => askUnexpected(character.name)} disabled={!freeQuestion.trim()}>Ask</button></div></article> })}
+        </section>
+
+        <section className="panel hint-panel">
+          <div className="section-heading"><span>HINT LADDER</span><small>{session.hintsUsed}/{CANON.hints.length}</small></div>
+          <button onClick={useHint} disabled={session.hintsUsed >= CANON.hints.length}>Request next hint</button>
+          {hintText && <p className="hint-text">{hintText}</p>}
+        </section>
+
+        {document.id === 'message-console' && <section className="panel terminal-panel"><div className="section-heading"><span>LOCAL TERMINAL</span><small>state-bound</small></div><div className="terminal-output">{session.events.filter(event => event.type === 'terminal-command').map(event => <div key={event.id}>{event.detail} :: accepted</div>)}{session.events.filter(event => event.type === 'terminal-command').length === 0 && <div>awaiting command…</div>}</div><div className="terminal-buttons"><button onClick={() => terminal('COMPARE CLOCKS')}>COMPARE CLOCKS</button><button onClick={() => terminal('AUDIT PACKET')} disabled={!session.discoveredClues.includes('crew-survived')}>AUDIT PACKET</button></div></section>}
+
+        {availableEndings.length > 0 && <section className="panel ending-panel"><div className="section-heading"><span>FINAL DECISION</span><small>engine gate open</small></div><p>The packet is complete enough to choose. The character who corroborated your chain determines which ending is available.</p>{availableEndings.map(ending => <button key={ending.id} className="ending-button" onClick={() => selectEnding(ending.id)} disabled={Boolean(session.ending)}><strong>{ending.title}</strong><span>{ending.decision}</span></button>)}{session.ending && <div className="ending-result"><span>ENDING / {session.ending.toUpperCase()}</span><p>{CANON.endings.find(ending => ending.id === session.ending)?.text}</p></div>}</section>}
+
+        <section className="panel save-panel"><div className="section-heading"><span>SESSION CONTROLS</span><small>local only</small></div><div className="control-row"><button className="secondary" onClick={restart}>Restart investigation</button><button className="secondary" onClick={() => setSolutionVisible(value => !value)}>{solutionVisible ? 'Hide author solution' : 'Reveal author solution'}</button></div><details><summary>Export or restore a save</summary><textarea value={importText} onChange={event => setImportText(event.target.value)} placeholder="Paste a phantom-web/session/v1 save here" /><div className="control-row"><button className="secondary" onClick={() => { try { setImportText(writeSession(session)); setMessage('Current session serialized below.') } catch { setMessage('Current session could not be serialized.') } }}>Prepare current save</button><button onClick={importSave} disabled={!importText.trim()}>Restore save</button></div></details>{solutionVisible && <div className="solution-warning"><strong>AUTHOR VIEW / SPOILERS</strong>{CANON.endings.map(ending => <p key={ending.id}><b>{ending.title}:</b> requires {ending.requires.join(' + ')}.</p>)}</div>}</section>
+      </aside>
     </div>
-    <section className="panel"><h2>Evidence notebook <span className="count">{entries.length}</span></h2><ul>{entries.map(entry => <li key={entry}><button className="secondary" onClick={() => setSelected(entry)}>{corpus.documents.find(page => page.id === entry)!.title}</button></li>)}</ul>{entries.length === 0 && <p>Save a document to keep its source across reloads.</p>}<button className="secondary" onClick={reset}>Clear notebook</button></section>
-    <footer>All pages and institutions are fictional. Next: canon, clue gates, characters, hints and two endings. Read docs/BUILD-PROMPT.md.</footer>
+
+    <footer>All institutions, people, pages, and events are fictional. Prepared mode requires no key. Optional live AI remains a separate, unverified adapter.</footer>
   </main>
 }
+
+export default App

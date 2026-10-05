@@ -1,11 +1,14 @@
 # First product build
 
-## Starter delivered
+## Prepared mystery delivered
 
-Three original sample documents, real corpus search, source-linked notebook persistence, and canon/reference validation tests.
+The first vertical slice now includes the authored Astra Relay canon, chronology, twelve-page corpus, dependency-checked clue graph, three gated witnesses, a prepared no-key conversation path, a state-bound terminal, source-linked notebook annotations, validated saves, hints, and both engine-owned endings. `npm run verify` is the local gate for this slice.
 
-## First work for the build agent
+## Remaining release work
 
-Author the complete canon and clue graph, write the remaining pages, implement three character roles and disclosure gates, and prove two reachable endings before adding broad world generation.
+- Exercise the running browser from an empty local session and capture visible proof for navigation, search, notebook reload, prepared dialogue, hints, and each ending.
+- Add a thin server-side provider adapter only after selecting an authorized provider route. Keep the prepared route as the no-key fallback and prove timeout/cancellation, forbidden claims, and safe retry with one real configured conversation.
+- Add a spoiler-conscious demo recording, clean-clone installation proof, accessibility pass, and release notes. Hosting/public deployment remains a separate owner action.
+- Reconcile the first focused pull request against current `main`, then continue feature slices on new `codex/` branches. Do not treat this local worktree, a green build, or a draft PR as a deployed release.
 
 Use the complete [build prompt](BUILD-PROMPT.md) for sequencing and acceptance. Finish a coherent vertical slice before adding a platform, accounts, multiplayer, or billing. The no-key starter is an honest baseline; a real configured provider must be exercised separately before live AI is described as verified. The repository now carries a reproducible GitHub Pages workflow; its workflow run and public URL still need separate readback before deployment is called adopted.
