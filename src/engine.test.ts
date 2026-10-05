@@ -107,6 +107,7 @@ describe('prepared character and session safety boundaries', () => {
     })
     expect(valid.accepted).toBe(true)
     expect(valid.session.discoveredClues).toContain('maintenance-signature')
+    expect(() => writeSession(valid.session)).not.toThrow()
 
     const beforeForbidden = JSON.stringify(base)
     const forbidden = applyModelProposal(base, 'mara', {
@@ -126,6 +127,19 @@ describe('prepared character and session safety boundaries', () => {
     })
     expect(fabricated.accepted).toBe(false)
     expect(JSON.stringify(fabricated.session)).toBe(beforeForbidden)
+
+    const duplicateBatch = applyModelProposal(base, 'ilya', {
+      schema: 'phantom-web/model-response/v1',
+      text: 'The same answer was emitted twice.',
+      claims: ['maintenance-signature'],
+      actions: [
+        { type: 'grant-clue', clueId: 'maintenance-signature', disclosureId: 'ilya-signature' },
+        { type: 'grant-clue', clueId: 'maintenance-signature', disclosureId: 'ilya-signature' },
+      ],
+    })
+    expect(duplicateBatch.accepted).toBe(false)
+    expect(duplicateBatch.errors).toContain('duplicate clue action: maintenance-signature')
+    expect(JSON.stringify(duplicateBatch.session)).toBe(beforeForbidden)
 
     const directEnding = applyModelProposal(base, 'ilya', {
       schema: 'phantom-web/model-response/v1',
@@ -157,5 +171,17 @@ describe('prepared character and session safety boundaries', () => {
     expect(() => readSession('{')).toThrow()
     expect(() => readSession(JSON.stringify({ ...session, canonVersion: 'old-story' }))).toThrow()
     expect(() => readSession(JSON.stringify({ ...session, discoveredClues: ['missing-clue'] }))).toThrow()
+
+    const forgedBase = prepareBase('chronological')
+    const forgedReward = {
+      ...forgedBase,
+      discoveredClues: [...forgedBase.discoveredClues, 'decision-ready'],
+      events: [
+        ...forgedBase.events,
+        { id: 'clue:decision-ready', type: 'clue-discovered' as const, detail: 'decision-ready via terminal:audit-packet' },
+      ],
+    }
+    expect(() => readSession(JSON.stringify(forgedReward))).toThrow(/provenance/)
+    expect(() => writeSession({ ...createEmptySession(), phase: 'complete' })).toThrow(/ending/)
   })
 })

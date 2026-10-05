@@ -291,6 +291,7 @@ export function applyModelProposal(session: Session, characterId: CharacterId, r
   const accessible = character.disclosures.filter(disclosure => requirementsMet(session, disclosure.requires))
   const allowedClaims = new Set([...session.discoveredClues, ...accessible.flatMap(disclosure => disclosure.reveals ? [disclosure.reveals] : [])])
   const errors: string[] = []
+  const actionClues = new Set<string>()
   for (const claim of proposal.claims) {
     if (!findClue(claim)) errors.push(`unknown clue claim: ${claim}`)
     else if (!allowedClaims.has(claim)) errors.push(`forbidden clue claim: ${claim}`)
@@ -300,6 +301,8 @@ export function applyModelProposal(session: Session, characterId: CharacterId, r
     if (!findClue(action.clueId)) errors.push(`unknown clue action: ${action.clueId}`)
     if (!disclosure || disclosure.reveals !== action.clueId) errors.push(`unauthorized clue action: ${action.clueId}`)
     if (has(session, action.clueId)) errors.push(`duplicate clue reward: ${action.clueId}`)
+    if (actionClues.has(action.clueId)) errors.push(`duplicate clue action: ${action.clueId}`)
+    actionClues.add(action.clueId)
   }
   if (errors.length > 0) return { accepted: false, session, text: '', errors }
   const next = clone(session)
@@ -329,6 +332,176 @@ export function chooseEnding(session: Session, endingId: EndingId): Transition<s
   return { session: next, changed: true, message: ending.title, value: ending.text }
 }
 
+interface ClueAward {
+  clueId: string
+  source: string
+  actionIndex: number
+  clueBeforeAction: boolean
+}
+
+interface ClueEventRecord {
+  clueId: string
+  source: string
+  eventIndex: number
+}
+
+function parseClueEvent(detail: string) {
+  const match = detail.match(/^([a-z][a-z0-9:-]{0,79}) via (.+)$/)
+  return match ? { clueId: match[1], source: match[2] } : null
+}
+
+function validateSessionProvenance(session: Session) {
+  const errors: string[] = []
+  const replay = createEmptySession()
+  const visitedDocuments = new Set<string>()
+  const dialogueKeys = new Set<string>()
+  const terminalCommands = new Set<string>()
+  const awards: ClueAward[] = []
+  const clueEvents: ClueEventRecord[] = []
+
+  const recordAward = (clueId: string, source: string, actionIndex: number, clueBeforeAction: boolean) => {
+    if (has(replay, clueId)) return
+    replay.discoveredClues.push(clueId)
+    awards.push({ clueId, source, actionIndex, clueBeforeAction })
+  }
+
+  for (const [eventIndex, event] of session.events.entries()) {
+    switch (event.type) {
+      case 'document-opened': {
+        const document = findDocument(event.detail)
+        if (event.id !== `document:${event.detail}`) errors.push(`document event has an invalid id: ${event.id}`)
+        if (!document) {
+          errors.push(`document event refers to an unknown document: ${event.detail}`)
+          break
+        }
+        if (visitedDocuments.has(document.id)) {
+          errors.push(`document was opened more than once: ${document.id}`)
+          break
+        }
+        if (!requirementsMet(replay, document.requiresClues)) {
+          errors.push(`document was opened before its clues were discovered: ${document.id}`)
+          break
+        }
+        visitedDocuments.add(document.id)
+        for (const clueId of document.revealsClues) recordAward(clueId, `document:${document.id}`, eventIndex, false)
+        break
+      }
+      case 'dialogue': {
+        const separator = event.detail.indexOf(':')
+        const characterId = separator < 0 ? '' : event.detail.slice(0, separator)
+        const disclosureId = separator < 0 ? '' : event.detail.slice(separator + 1)
+        const character = findCharacter(characterId)
+        const disclosure = character?.disclosures.find(item => item.id === disclosureId)
+        const key = `${characterId}:${disclosureId}`
+        if (event.id !== `dialogue:${event.detail}`) errors.push(`dialogue event has an invalid id: ${event.id}`)
+        if (!character || !disclosure) {
+          errors.push(`dialogue event refers to an unknown disclosure: ${event.detail}`)
+          break
+        }
+        if (dialogueKeys.has(key)) {
+          errors.push(`dialogue disclosure was repeated: ${event.detail}`)
+          break
+        }
+        if (!requirementsMet(replay, disclosure.requires)) {
+          errors.push(`dialogue disclosure was used before its clues were discovered: ${event.detail}`)
+          break
+        }
+        dialogueKeys.add(key)
+        if (disclosure.reveals) recordAward(disclosure.reveals, `character:${characterId}`, eventIndex, false)
+        break
+      }
+      case 'terminal-command': {
+        const command = event.detail
+        const stableId = command === 'COMPARE CLOCKS'
+          ? 'terminal:compare-clocks'
+          : command === 'AUDIT PACKET'
+            ? 'terminal:audit-packet'
+            : ''
+        if (!stableId || event.id !== stableId) errors.push(`terminal event has an invalid command or id: ${command}`)
+        if (terminalCommands.has(command)) {
+          errors.push(`terminal command was repeated: ${command}`)
+          break
+        }
+        if (command === 'COMPARE CLOCKS') {
+          if (!requirementsMet(replay, ['clock-0317', 'postmark-0317'])) errors.push('clock comparison ran before both timestamp clues')
+          else recordAward('repeat-is-local', 'terminal:compare-clocks', eventIndex, true)
+        } else if (command === 'AUDIT PACKET') {
+          if (!requirementsMet(replay, ['crew-survived', 'quarantine-reason']) || (!has(replay, 'reporter-confirmation') && !has(replay, 'archivist-request'))) {
+            errors.push('packet audit ran before its departure and witness clues')
+          } else {
+            recordAward('decision-ready', 'terminal:audit-packet', eventIndex, true)
+          }
+        }
+        terminalCommands.add(command)
+        break
+      }
+      case 'hint-used': {
+        const hint = CANON.hints[replay.hintsUsed]
+        if (event.id !== `hint:${event.detail}`) errors.push(`hint event has an invalid id: ${event.id}`)
+        if (!hint || hint.id !== event.detail) errors.push(`hint event is out of sequence: ${event.detail}`)
+        else if (!requirementsMet(replay, hint.requires)) errors.push(`hint was used before its clues were discovered: ${event.detail}`)
+        else replay.hintsUsed += 1
+        break
+      }
+      case 'ending-reached': {
+        const ending = findEnding(event.detail as EndingId)
+        if (event.id !== `ending:${event.detail}`) errors.push(`ending event has an invalid id: ${event.id}`)
+        if (!ending || replay.ending) errors.push(`ending event is unknown or repeated: ${event.detail}`)
+        else if (!requirementsMet(replay, ending.requires)) errors.push(`ending was reached before its clues were discovered: ${event.detail}`)
+        else replay.ending = ending.id
+        break
+      }
+      case 'clue-discovered': {
+        const parsed = parseClueEvent(event.detail)
+        if (!parsed) {
+          errors.push(`clue event has invalid detail: ${event.detail}`)
+          break
+        }
+        if (event.id !== `clue:${parsed.clueId}`) errors.push(`clue event has an invalid id: ${event.id}`)
+        if (!findClue(parsed.clueId)) {
+          errors.push(`clue event refers to an unknown clue: ${parsed.clueId}`)
+          break
+        }
+        clueEvents.push({ ...parsed, eventIndex })
+        if (parsed.source.startsWith('model:')) {
+          const [, characterId, disclosureId] = parsed.source.split(':')
+          const character = findCharacter(characterId)
+          const disclosure = character?.disclosures.find(item => item.id === disclosureId)
+          if (!character || !disclosure || disclosure.reveals !== parsed.clueId) {
+            errors.push(`model clue event is not authorized: ${event.detail}`)
+          } else if (!requirementsMet(replay, disclosure.requires)) {
+            errors.push(`model clue event was used before its disclosure clues: ${event.detail}`)
+          } else {
+            recordAward(parsed.clueId, parsed.source, eventIndex, false)
+          }
+        }
+        break
+      }
+    }
+  }
+
+  const expectedClues = awards.map(award => award.clueId)
+  if (JSON.stringify(expectedClues) !== JSON.stringify(session.discoveredClues)) errors.push('discovered clues do not match their authored event provenance')
+  if (session.hintsUsed !== replay.hintsUsed) errors.push('hint count does not match hint events')
+  if (session.ending !== replay.ending) errors.push('ending does not match ending events')
+
+  const awardsByClue = new Map(awards.map(award => [award.clueId, award]))
+  for (const clueEvent of clueEvents) {
+    const award = awardsByClue.get(clueEvent.clueId)
+    if (!award) {
+      errors.push(`clue event has no authorized source: ${clueEvent.clueId}`)
+      continue
+    }
+    if (award.source !== clueEvent.source) errors.push(`clue event source does not match the authorized source: ${clueEvent.clueId}`)
+    const isSelfDescribingModelAward = award.source.startsWith('model:') && clueEvent.eventIndex === award.actionIndex
+    if (!isSelfDescribingModelAward && (award.clueBeforeAction ? clueEvent.eventIndex >= award.actionIndex : clueEvent.eventIndex <= award.actionIndex)) {
+      errors.push(`clue event has an invalid action order: ${clueEvent.clueId}`)
+    }
+  }
+  if (clueEvents.length !== awards.length) errors.push('discovered clues and clue events are out of sync')
+  return errors
+}
+
 function validateSessionReferences(session: Session) {
   const errors: string[] = []
   const documents = new Set(CORPUS.documents.map(document => document.id))
@@ -342,11 +515,13 @@ function validateSessionReferences(session: Session) {
     if (!documents.has(entry.documentId)) errors.push('evidence refers to an unknown document')
     if (entry.connectedClueIds.some(clue => !clues.has(clue))) errors.push('evidence refers to an unknown clue')
   }
+  if (session.phase === 'complete' && !session.ending) errors.push('completed session must have an ending')
   if (session.ending) {
     const ending = findEnding(session.ending)
     if (!ending || !requirementsMet(session, ending.requires)) errors.push('session ending is not supported by discovered evidence')
     if (session.phase !== 'complete') errors.push('completed session must have complete phase')
   }
+  errors.push(...validateSessionProvenance(session))
   return errors
 }
 
